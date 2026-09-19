@@ -203,11 +203,6 @@ pub fn run() {
             configure(&conn).map_err(std::io::Error::other)?;
             migrate(&conn).map_err(std::io::Error::other)?;
             app.manage(DbState(Mutex::new(conn)));
-            #[cfg(desktop)]
-            {
-                app.handle().plugin(tauri_plugin_updater::Builder::new().build())
-                    .map_err(|e| std::io::Error::other(e.to_string()))?;
-            }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
