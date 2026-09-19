@@ -77,7 +77,7 @@ const navItems=[
  ['dashboard','🏠 Dashboard'],['mentor','🧭 Mentor & Capital'],['planner','📅 Daily Planner'],['tasks','✅ To-Do & Projects'],
  ['routine','🕉 Routine Planner'],['habits','🧘 Habits'],['goals','🎯 Goals'],['focus','⏱ Focus'],
  ['notes','📝 Notes'],['journal','📔 Daily Journal'],['expenses','💰 Expenses & Income'],
- ['personal','👤 Personal'],['professional','💼 Professional'],['spiritual','🕉 Spiritual'],['economical','💰 Economical'],['mental','🧠 Mental'],['social','🤝 Social'],['moral','⚖️ Moral'],['settings','⚙️ Settings']
+ ['personal','👤 Personal'],['professional','💼 Professional'],['spiritual','🕉 Spiritual'],['economical','💰 Economical'],['mental','🧠 Mental'],['social','🤝 Social'],['moral','⚖️ Moral'],['device-storage','💾 Device Storage'],['settings','⚙️ Settings']
 ];
 
 let draftSaveTimer=null;
@@ -390,7 +390,8 @@ function today(){const el=document.getElementById('today');if(el&&el.value)retur
 function esc(s=''){return String(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]))}
 function uid(){return (crypto&&crypto.randomUUID)?crypto.randomUUID():Date.now()+Math.random().toString(16).slice(2)}
 function nav(){document.getElementById('nav').innerHTML=navItems.map(([id,t])=>`<button onclick="show('${id}')" id="nav-${id}">${t}</button>`).join('')}
-function show(id){document.querySelectorAll('.section').forEach(x=>x.classList.remove('active'));const target=document.getElementById(id);if(target)target.classList.add('active');document.querySelectorAll('#nav button').forEach(x=>x.classList.remove('active'));const nb=document.getElementById('nav-'+id);if(nb)nb.classList.add('active');document.querySelectorAll('#mobileBottomNav button[data-section]').forEach(x=>x.classList.toggle('active',x.dataset.section===id));const item=navItems.find(x=>x[0]===id);document.getElementById('pageTitle').textContent=item?item[1].replace(/^[^ ]+ /,''):id;render()}
+window.toggleMobileNav=function(force){const d=document.getElementById('mobileNavDrawer'),b=document.getElementById('mobileNavBackdrop');if(!d||!b)return;const open=typeof force==='boolean'?force:!d.classList.contains('open');d.classList.toggle('open',open);b.classList.toggle('open',open)};
+function show(id){document.querySelectorAll('.section').forEach(x=>x.classList.remove('active'));const target=document.getElementById(id);if(target)target.classList.add('active');document.querySelectorAll('#nav button').forEach(x=>x.classList.remove('active'));const nb=document.getElementById('nav-'+id);if(nb)nb.classList.add('active');document.querySelectorAll('#mobileBottomNav button[data-section]').forEach(x=>x.classList.toggle('active',x.dataset.section===id));const item=navItems.find(x=>x[0]===id);const title=item?item[1].replace(/^[^ ]+ /,''):id;document.getElementById('pageTitle').textContent=title;const mt=document.getElementById('mobilePageTitle');if(mt)mt.textContent=title;window.toggleMobileNav?.(false);render()}
 function dayObj(){const key=today();if(!data.daily[key]||typeof data.daily[key]!=='object')data.daily[key]={target:'',progress:'',planPoints:[],achievementPoints:[],reflectionPoints:[]};const d=data.daily[key];if(!Array.isArray(d.planPoints))d.planPoints=[];if(!Array.isArray(d.achievementPoints))d.achievementPoints=[];if(!Array.isArray(d.reflectionPoints))d.reflectionPoints=[];return d}
 function addPoint(kind){let x=prompt('Point लिखें:');if(x&&x.trim()){dayObj()[kind].push({id:uid(),text:x.trim(),done:false});save();render()}}
 function togglePoint(kind,id){let p=dayObj()[kind].find(x=>x.id===id);if(p)p.done=!p.done;save();render()}
@@ -789,7 +790,7 @@ function toggleCategoryItem(id,itemId,done){const a=getCategoryItems(id),x=a.fin
 function deleteCategoryItem(id,itemId){saveCategoryItems(id,getCategoryItems(id).filter(x=>x.id!==itemId));renderCategory(id)}
 
 
-function render(){const active=document.querySelector('.section.active');if(!active)return;let id=active.id;if(id==='dashboard')renderDashboard();if(id==='mentor')renderMentor();if(id==='planner')renderPlanner();if(id==='tasks')renderTasks();if(id==='routine')renderRoutine();if(id==='notes')renderNotes();if(id==='journal')renderJournal();if(id==='habits')renderHabits();if(id==='expenses')renderExpenses();if(id==='goals')renderGoals();if(id==='focus')renderFocus();if(LIFEOS_CATEGORIES[id])renderCategory(id);if(id==='settings')renderSettings();restoreDrafts()}
+function render(){const active=document.querySelector('.section.active');if(!active)return;let id=active.id;if(id==='dashboard')renderDashboard();if(id==='mentor')renderMentor();if(id==='planner')renderPlanner();if(id==='tasks')renderTasks();if(id==='routine')renderRoutine();if(id==='notes')renderNotes();if(id==='journal')renderJournal();if(id==='habits')renderHabits();if(id==='expenses')renderExpenses();if(id==='goals')renderGoals();if(id==='focus')renderFocus();if(LIFEOS_CATEGORIES[id])renderCategory(id);if(id==='settings')renderSettings();if(id==='device-storage')window.renderDeviceStorage?.();restoreDrafts()}
 const __localDate = new Date();
 const __yyyy = __localDate.getFullYear();
 const __mm = String(__localDate.getMonth()+1).padStart(2,'0');

@@ -57,11 +57,13 @@
   }
   function computerConnected(){return !!computerDirectoryHandle}
   function computerStatusHtml(){
+    if(isMobileRuntime())return '<span class="backup-connected">● Mobile storage active</span>';
     return computerConnected()
       ? `<span class="backup-connected">● Connected: ${esc(computerDirectoryHandle.name||'Computer folder')}</span>`
       : `<span class="backup-connected backup-disconnected">● Not connected</span>`;
   }
   async function connectComputer(){
+    if(isMobileRuntime()){toast('Mobile: exports save to Downloads or Share. No Windows folder picker is used.');return false;}
     try{
       if(!window.showDirectoryPicker){
         toast('Chrome/Edge desktop में folder connection के लिए यह सुविधा चाहिए');
@@ -141,6 +143,7 @@
     return true;
   }
   async function saveComputerForExport(filename,content,mime,subfolder=''){
+    if(isMobileRuntime())return saveBlobForMobile(filename,content,mime);
     const handle=await ensureComputerFolderForExport();
     if(!handle)return false;
     try{
@@ -168,11 +171,38 @@
       toast('✓ JSON backup saved to selected folder');
     }catch(e){console.error(e);toast('Backup export failed: '+(e?.message||'Unknown error'))}
   };
+  function isMobileRuntime(){return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent||'')||window.innerWidth<=700}
+  window.lifeosIsMobileRuntime=isMobileRuntime;
+  async function saveBlobForMobile(filename,content,mime){
+    const blob=content instanceof Blob?content:new Blob([content],{type:mime||'application/octet-stream'});
+    // Native Android: save directly into Downloads when the Tauri fs scope is available.
+    if(isMobileRuntime() && window.__TAURI__?.fs){
+      try{
+        const fs=window.__TAURI__.fs;
+        const bytes=new Uint8Array(await blob.arrayBuffer());
+        await fs.writeFile(filename,bytes,{baseDir:fs.BaseDirectory.Download});
+        toast('✓ Backup saved in Downloads');
+        return true;
+      }catch(e){console.warn('Native Downloads save unavailable',e)}
+    }
+    try{
+      const file=new File([blob],filename,{type:mime||blob.type||'application/octet-stream'});
+      if(navigator.share && (!navigator.canShare || navigator.canShare({files:[file]}))){
+        await navigator.share({title:'LifeOS Backup',text:'LifeOS Backup: '+filename,files:[file]});
+        toast('✓ File shared'); return true;
+      }
+    }catch(e){if(e?.name==='AbortError')return false}
+    try{
+      const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=filename;a.rel='noopener';a.style.display='none';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),15000);toast('✓ File download started');return true;
+    }catch(e){toast('Mobile file save failed: '+(e?.message||'Unknown error'));return false}
+  }
+
   /* Robust Office export: generate real OOXML .docx/.xlsx files in-browser. */
   function officeXmlEsc(v){return String(v??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&apos;')}
   function u16(n){return new Uint8Array([n&255,(n>>>8)&255])}
   function u32(n){return new Uint8Array([n&255,(n>>>8)&255,(n>>>16)&255,(n>>>24)&255])}
-  const CRC32_TABLE=(()=>{const t=new Uint32Array(256);for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)c=(c&1)?(0xedb88320^(c>>>1)):(c>>>1);t[n]=c>>>0}return t})();
+  const CRC32_TABLE=(()=>{
+const t=new Uint32Array(256);for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)c=(c&1)?(0xedb88320^(c>>>1)):(c>>>1);t[n]=c>>>0}return t})();
   function crc32(bytes){let c=0xffffffff;for(const b of bytes)c=CRC32_TABLE[(c^b)&255]^(c>>>8);return (c^0xffffffff)>>>0}
   function concatBytes(parts){let n=0;for(const p of parts)n+=p.length;const out=new Uint8Array(n);let o=0;for(const p of parts){out.set(p,o);o+=p.length}return out}
   function zipStore(files){
@@ -523,5 +553,6 @@
     const m=document.getElementById('backupExportMenu');
     if(m&&!e.target.closest('.backup-export-menu-wrap'))m.classList.remove('open');
   });
+  window.renderDeviceStorage=function(){const el=document.getElementById('device-storage');if(!el)return;const mobile=isMobileRuntime();el.innerHTML=`<div class="hero"><h2>💾 Device Storage</h2><p class="muted">${mobile?'LifeOS keeps app data in its private app storage. Backups can be saved to Downloads or shared to another device.':'LifeOS uses native SQLite plus browser storage fallback.'}</p></div><div class="grid"><div class="card"><h3>App storage</h3><p class="muted">IndexedDB + SQLite: Active</p></div><div class="card"><h3>Downloads</h3><p class="muted">${mobile?'JSON backups can be saved to the Android Downloads folder.':'Computer exports use the connected folder.'}</p></div><div class="card"><h3>Permissions</h3><p class="muted">${mobile?'Only the Downloads file access needed for backup is used; no broad file browsing is required.':'Desktop folder access is requested only when you connect a folder.'}</p></div></div><div class="card"><h3>Backup</h3><p class="muted">Export JSON Backup for a complete portable backup. Import accepts the same JSON backup file.</p><div class="row"><button class="primary" type="button" onclick="window.exportLifeOSBackup()">⬇️ Export JSON Backup</button></div></div>`};
   window.connectComputer=connectComputer;
   window.disconnectComputer=clearComputerConnection;

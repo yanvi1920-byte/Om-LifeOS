@@ -10,6 +10,16 @@
     "iOS"
   ],
   "permissions": [
-    "core:default"
+    "core:default",
+    "fs:default",
+    "fs:write-files",
+    {
+      "identifier": "fs:scope",
+      "allow": [
+        {
+          "path": "$DOWNLOAD/**/*"
+        }
+      ]
+    }
   ]
 }
