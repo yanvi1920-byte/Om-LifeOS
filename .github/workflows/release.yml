@@ -41,7 +41,7 @@ jobs:
             ॐ LifeOS ${{ github.ref_name }}
 
             Windows installer release.
-            Android signed APK and AAB are included when the Android build completes.
+            Signed Android APK and AAB are included when the Android build completes.
           releaseDraft: false
           prerelease: false
           args: "--target x86_64-pc-windows-msvc"
@@ -93,8 +93,17 @@ jobs:
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
-          printf '%s' "$ANDROID_KEY_BASE64" | tr -d '
- ' | base64 -d > "$RUNNER_TEMP/keystore.jks"
+          set -e
+
+          test -n "$ANDROID_KEY_BASE64"
+          test -n "$ANDROID_KEY_ALIAS"
+          test -n "$ANDROID_KEY_PASSWORD"
+
+          printf '%s' "$ANDROID_KEY_BASE64" \
+            | tr -d '[:space:]' \
+            | base64 --decode > "$RUNNER_TEMP/keystore.jks"
+
+          test -s "$RUNNER_TEMP/keystore.jks"
 
           cd src-tauri/gen/android
 
@@ -110,16 +119,23 @@ jobs:
           from pathlib import Path
 
           path = Path("src-tauri/gen/android/app/build.gradle.kts")
+
+          if not path.exists():
+              raise SystemExit(
+                  "ERROR: src-tauri/gen/android/app/build.gradle.kts not found"
+              )
+
           text = path.read_text()
 
+          # Required imports.
           if "import java.io.FileInputStream" not in text:
               text = "import java.io.FileInputStream\n" + text
 
           if "import java.util.Properties" not in text:
               text = "import java.util.Properties\n" + text
 
-          signing_block = '''
-          signingConfigs {
+          # Tauri's documented release signing configuration.
+          signing_block = """signingConfigs {
               create("release") {
                   val keystorePropertiesFile = rootProject.file("keystore.properties")
                   val keystoreProperties = Properties()
@@ -135,52 +151,87 @@ jobs:
               }
           }
 
-          '''
+          """
 
           if 'create("release")' not in text:
-              if "buildTypes {" not in text:
-                  raise SystemExit("ERROR: buildTypes block not found")
+              marker = "buildTypes {"
+
+              if marker not in text:
+                  raise SystemExit(
+                      "ERROR: buildTypes block not found in Android app build.gradle.kts"
+                  )
 
               text = text.replace(
-                  "buildTypes {",
-                  signing_block + "buildTypes {",
+                  marker,
+                  signing_block + marker,
                   1
               )
 
-          release_signing = 'signingConfig = signingConfigs.getByName("release")'
+          signing_line = 'signingConfig = signingConfigs.getByName("release")'
 
-          if release_signing not in text:
+          if signing_line not in text:
               release_marker = 'getByName("release") {'
 
-              if release_marker in text:
-                  text = text.replace(
-                      release_marker,
-                      release_marker + "\n        " + release_signing,
-                      1
-                  )
-              else:
-                  text = text.replace(
-                      "buildTypes {",
-                      'buildTypes {\n        getByName("release") {\n            ' +
-                      release_signing +
-                      "\n        }",
-                      1
+              if release_marker not in text:
+                  raise SystemExit(
+                      'ERROR: release build type getByName("release") block not found'
                   )
 
+              text = text.replace(
+                  release_marker,
+                  release_marker + "\n            " + signing_line,
+                  1
+              )
+
           path.write_text(text)
+
           print("Android signing configuration applied successfully.")
           PY
 
+      - name: Verify Android signing configuration
+        run: |
+          set -e
+
+          test -s "$RUNNER_TEMP/keystore.jks"
+          test -f src-tauri/gen/android/keystore.properties
+          test -f src-tauri/gen/android/app/build.gradle.kts
+
+          grep -q 'create("release")' \
+            src-tauri/gen/android/app/build.gradle.kts
+
+          grep -q 'signingConfig = signingConfigs.getByName("release")' \
+            src-tauri/gen/android/app/build.gradle.kts
+
+          echo "Android signing configuration verified."
+
       - name: Build Android AAB
-        run: npm run tauri android build -- --aab --ci --target aarch64
+        run: |
+          npm run tauri android build -- --aab --ci --target aarch64
 
       - name: Build Android APK
-        run: npm run tauri android build -- --apk --ci --target aarch64
+        run: |
+          npm run tauri android build -- --apk --ci --target aarch64
+
+      - name: Verify Android output files
+        run: |
+          set -e
+
+          test -s \
+            src-tauri/gen/android/app/build/outputs/bundle/universalRelease/app-universal-release.aab
+
+          test -s \
+            src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release.apk
+
+          echo "Android AAB and APK found."
 
       - name: Verify Android APK signature
         run: |
+          set -e
+
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose \
             src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release.apk
+
+          echo "Android APK signature verified."
 
       - name: Upload Android workflow artifacts
         uses: actions/upload-artifact@v4
@@ -195,7 +246,11 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          set -e
+
           gh release upload "${{ github.ref_name }}" \
             "src-tauri/gen/android/app/build/outputs/bundle/universalRelease/app-universal-release.aab" \
             "src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release.apk" \
             --clobber
+
+          echo "Signed Android AAB and APK uploaded to GitHub Release."
