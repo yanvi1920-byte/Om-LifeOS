@@ -1,0 +1,15 @@
+{
+  "$schema": "../gen/schemas/mobile-schema.json",
+  "identifier": "mobile-capability",
+  "description": "Minimal mobile permissions for the main application window.",
+  "windows": [
+    "main"
+  ],
+  "platforms": [
+    "android",
+    "iOS"
+  ],
+  "permissions": [
+    "core:default"
+  ]
+}

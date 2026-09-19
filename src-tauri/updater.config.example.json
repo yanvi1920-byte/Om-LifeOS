@@ -1,0 +1,13 @@
+{
+  "bundle": {
+    "createUpdaterArtifacts": true
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "REPLACE_WITH_TAURI_UPDATER_PUBLIC_KEY",
+      "endpoints": [
+        "https://github.com/yanvi1920-byte/Om-LifeOS/releases/latest/download/latest.json"
+      ]
+    }
+  }
+}
