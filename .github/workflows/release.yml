@@ -93,7 +93,8 @@ jobs:
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
-          echo "$ANDROID_KEY_BASE64" | base64 --decode > "$RUNNER_TEMP/keystore.jks"
+          printf '%s' "$ANDROID_KEY_BASE64" | tr -d '
+ ' | base64 -d > "$RUNNER_TEMP/keystore.jks"
 
           cd src-tauri/gen/android
 
