@@ -4,13 +4,13 @@ on:
   push:
     tags:
       - "v*"
-  workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
   windows:
+    name: Windows
     runs-on: windows-latest
 
     steps:
@@ -30,18 +30,23 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Build Windows installer
+      - name: Build Windows release
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tagName: ${{ github.ref_name }}
           releaseName: ॐ ${{ github.ref_name }}
-          releaseBody: Automated Windows release of ॐ LifeOS.
+          releaseBody: |
+            ॐ LifeOS ${{ github.ref_name }}
+
+            Windows installer release.
           releaseDraft: false
           prerelease: false
+          args: "--target x86_64-pc-windows-msvc"
 
   android:
+    name: Android
     runs-on: ubuntu-latest
 
     steps:
@@ -61,12 +66,13 @@ jobs:
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v4
-        with:
-          packages: "platform-tools"
 
       - name: Install Android SDK packages
         run: |
-          sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0" "ndk;28.0.13004108"
+          sdkmanager "platform-tools" \
+            "platforms;android-35" \
+            "build-tools;35.0.0" \
+            "ndk;28.0.13004108"
 
       - name: Setup Rust Android targets
         uses: dtolnay/rust-toolchain@stable
@@ -76,7 +82,7 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Initialize Android project
+      - name: Initialize Android
         run: npx tauri android init --ci
 
       - name: Build Android AAB
@@ -85,10 +91,10 @@ jobs:
       - name: Build Android APK
         run: npm run tauri android build -- --apk --ci --target aarch64
 
-      - name: Upload Android artifacts
+      - name: Upload Android workflow artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: om-lifeos-android
+          name: om-lifeos-android-${{ github.ref_name }}
           path: |
             src-tauri/gen/android/app/build/outputs/**/*.aab
             src-tauri/gen/android/app/build/outputs/**/*.apk
