@@ -92,3 +92,13 @@
   h2{font-size:15px} h3{font-size:13px}
   .backup-export-grid button,.backup-actions-grid button,.backup-export-grid .backup-import-label,.backup-actions-grid .backup-import-label{font-size:8px}
 }
+
+/* ॐ Settings final desktop layout */
+.settings-top-grid{align-items:stretch}
+.settings-left-stack{display:grid;grid-template-rows:repeat(3,minmax(0,auto));gap:10px;min-height:100%;height:100%}
+.settings-left-stack>.card{height:100%;margin:0}
+.settings-backup-card{height:100%;min-height:100%}
+@media (max-width:1050px){
+  .settings-left-stack{grid-template-rows:auto auto auto;height:auto;min-height:0}
+  .settings-left-stack>.card,.settings-backup-card{height:auto;min-height:0}
+}
