@@ -1,0 +1,95 @@
+name: Build and release ॐ
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: npm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build Windows installer
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: ॐ ${{ github.ref_name }}
+          releaseBody: Automated Windows release of ॐ LifeOS.
+          releaseDraft: false
+          prerelease: false
+
+  android:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: npm
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK/NDK
+        run: |
+          sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0" "ndk;28.0.13004108"
+
+      - name: Setup Rust Android targets
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Initialize Android project
+        run: npx tauri android init --ci
+
+      - name: Build Android AAB
+        run: npm run tauri android build -- --aab --ci --target aarch64
+
+      - name: Build Android APK
+        run: npm run tauri android build -- --apk --ci --target aarch64
+
+      - name: Upload Android artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: om-lifeos-android
+          path: |
+            src-tauri/gen/android/app/build/outputs/**/*.aab
+            src-tauri/gen/android/app/build/outputs/**/*.apk
+          if-no-files-found: error
