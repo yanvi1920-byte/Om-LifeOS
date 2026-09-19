@@ -1,0 +1,20 @@
+[package]
+name = "lifeos"
+version = "1.0.0"
+description = "LifeOS — lightweight personal life management app"
+authors = ["LifeOS"]
+edition = "2021"
+
+[lib]
+name = "lifeos_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]
