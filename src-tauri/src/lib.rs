@@ -358,6 +358,65 @@ fn db_integrity_check(state: State<'_, DbState>) -> Result<String, String> {
     conn.query_row("PRAGMA integrity_check", [], |r| r.get(0)).map_err(|e| e.to_string())
 }
 
+
+#[tauri::command]
+fn choose_export_directory() -> Result<Option<String>, String> {
+    #[cfg(windows)]
+    {
+        Ok(rfd::FileDialog::new()
+            .set_title("Choose LifeOS export folder")
+            .pick_folder()
+            .map(|path| path.to_string_lossy().into_owned()))
+    }
+
+    #[cfg(not(windows))]
+    {
+        Err("Native Windows folder picker is only available on Windows.".into())
+    }
+}
+
+#[tauri::command]
+fn save_export_file(
+    root: String,
+    subfolder: String,
+    filename: String,
+    bytes: Vec<u8>,
+) -> Result<String, String> {
+    use std::path::Path;
+
+    if root.trim().is_empty() {
+        return Err("Export folder is not selected.".into());
+    }
+
+    let safe_filename = Path::new(&filename)
+        .file_name()
+        .and_then(|v| v.to_str())
+        .ok_or_else(|| "Invalid export filename.".to_string())?;
+
+    if safe_filename != filename || safe_filename.is_empty() {
+        return Err("Invalid export filename.".into());
+    }
+
+    let folder_name = subfolder.trim();
+    if !matches!(folder_name, "Word" | "Excel" | "PDF" | "Backup") {
+        return Err("Invalid export folder.".into());
+    }
+
+    let root_path = PathBuf::from(root);
+    if !root_path.is_dir() {
+        return Err("Connected export folder no longer exists.".into());
+    }
+
+    let target_dir = root_path.join(folder_name);
+    fs::create_dir_all(&target_dir).map_err(|e| format!("Could not create {} folder: {}", folder_name, e))?;
+
+    let target = target_dir.join(safe_filename);
+    fs::write(&target, bytes)
+        .map_err(|e| format!("Could not save {}: {}", safe_filename, e))?;
+
+    Ok(target.to_string_lossy().into_owned())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -373,7 +432,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             db_init, db_total_count, db_upsert_record, db_upsert_records, db_delete_record, db_delete_records, db_backup_to, db_auto_backup, db_list_records, db_list_record_ids,
             db_count_records, db_search_records, db_finance_summary, db_get_record, db_set_meta, db_get_meta, db_get_meta_stamp,
-            db_checkpoint, db_integrity_check
+            db_checkpoint, db_integrity_check, choose_export_directory, save_export_file
         ])
         .run(tauri::generate_context!())
         .expect("error while running ॐ");

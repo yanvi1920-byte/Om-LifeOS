@@ -1,175 +1,118 @@
 
-  /* LifeOS Backup & Export + direct computer folder bridge */
-  const COMPUTER_DB='lifeos-computer-connector-v1';
-  const COMPUTER_STORE='connection';
-  let computerDBPromise=null;
-  let computerDirectoryHandle=null;
+  /* LifeOS Backup & Export — native Windows folder bridge.
+     Do not persist a browser FileSystemDirectoryHandle here. Tauri/Windows
+     stores a real folder path and Rust performs the actual file I/O. */
+  const COMPUTER_PATH_KEY='lifeos-computer-export-path-v2';
+  let computerDirectoryPath='';
 
-  function openComputerDB(){
-    if(computerDBPromise)return computerDBPromise;
-    computerDBPromise=new Promise((resolve,reject)=>{
-      if(!('indexedDB' in window)){reject(new Error('IndexedDB unavailable'));return}
-      const req=indexedDB.open(COMPUTER_DB,1);
-      req.onupgradeneeded=()=>{if(!req.result.objectStoreNames.contains(COMPUTER_STORE))req.result.createObjectStore(COMPUTER_STORE)};
-      req.onsuccess=()=>resolve(req.result);
-      req.onerror=()=>reject(req.error||new Error('Computer connector storage unavailable'));
-    });
-    return computerDBPromise;
+  function nativeInvoke(command,args){
+    const invoke=window.__TAURI__?.core?.invoke;
+    if(typeof invoke==='function')return invoke(command,args);
+    const internals=window.__TAURI_INTERNALS__;
+    if(internals && typeof internals.invoke==='function')return internals.invoke(command,args);
+    throw new Error('Native Tauri bridge unavailable');
   }
+
   async function loadComputerConnection(){
     try{
-      const db=await openComputerDB();
-      computerDirectoryHandle=await new Promise((resolve,reject)=>{
-        const tx=db.transaction(COMPUTER_STORE,'readonly'),req=tx.objectStore(COMPUTER_STORE).get('directory');
-        req.onsuccess=()=>resolve(req.result||null);req.onerror=()=>reject(req.error);
-      });
-      return computerDirectoryHandle;
-    }catch(e){return null}
+      computerDirectoryPath=String(localStorage.getItem(COMPUTER_PATH_KEY)||'').trim();
+      return computerDirectoryPath||null;
+    }catch(e){
+      computerDirectoryPath='';
+      return null;
+    }
   }
-  async function saveComputerConnection(handle){
+
+  async function saveComputerConnection(path){
     try{
-      const db=await openComputerDB();
-      await new Promise((resolve,reject)=>{
-        const tx=db.transaction(COMPUTER_STORE,'readwrite');
-        tx.objectStore(COMPUTER_STORE).put(handle,'directory');
-        tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error||new Error('Connection save failed'));
-      });
+      computerDirectoryPath=String(path||'').trim();
+      if(computerDirectoryPath)localStorage.setItem(COMPUTER_PATH_KEY,computerDirectoryPath);
+      else localStorage.removeItem(COMPUTER_PATH_KEY);
     }catch(e){console.warn('Computer connection persistence failed',e)}
   }
+
   async function clearComputerConnection(){
-    computerDirectoryHandle=null;
-    try{
-      const db=await openComputerDB();
-      await new Promise((resolve,reject)=>{
-        const tx=db.transaction(COMPUTER_STORE,'readwrite');tx.objectStore(COMPUTER_STORE).delete('directory');
-        tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);
-      });
-    }catch(e){}
+    computerDirectoryPath='';
+    try{localStorage.removeItem(COMPUTER_PATH_KEY)}catch(e){}
     renderSettings();
   }
-  async function ensureComputerPermission(handle){
-    if(!handle)return false;
-    try{
-      let p=await handle.queryPermission?.({mode:'readwrite'});
-      if(p==='granted')return true;
-      if(handle.requestPermission){p=await handle.requestPermission({mode:'readwrite'});return p==='granted'}
-      return false;
-    }catch(e){return false}
+
+  async function chooseComputerFolder(){
+    const path=await nativeInvoke('choose_export_directory');
+    if(!path)return null;
+    await saveComputerConnection(path);
+    return path;
   }
-  function computerConnected(){return !!computerDirectoryHandle}
+
+  function computerConnected(){return !!computerDirectoryPath}
+
   function computerStatusHtml(){
     if(isMobileRuntime())return '<span class="backup-connected">● Mobile storage active</span>';
     return computerConnected()
-      ? `<span class="backup-connected">● Connected: ${esc(computerDirectoryHandle.name||'Computer folder')}</span>`
+      ? `<span class="backup-connected">● Connected: ${esc(computerDirectoryPath)}</span>`
       : `<span class="backup-connected backup-disconnected">● Not connected</span>`;
   }
+
   async function connectComputer(){
-    if(isMobileRuntime()){toast('Mobile: exports save to Downloads or Share. No Windows folder picker is used.');return false;}
+    if(isMobileRuntime()){
+      toast('Mobile: exports save to Downloads or Share. No Windows folder picker is used.');
+      return false;
+    }
     try{
-      if(!window.showDirectoryPicker){
-        toast('Chrome/Edge desktop में folder connection के लिए यह सुविधा चाहिए');
-        return false;
-      }
-      const handle=await window.showDirectoryPicker({mode:'readwrite'});
-      if(!(await ensureComputerPermission(handle)))throw new Error('Folder permission denied');
-      computerDirectoryHandle=handle;
-      await ensureExportSubfolders(handle);
-      await saveComputerConnection(handle);
+      const path=await chooseComputerFolder();
+      if(!path)return false;
       renderSettings();
-      toast(`✓ Computer connected: ${handle.name}`);
+      toast(`✓ Computer connected: ${path}`);
       return true;
     }catch(e){
-      if(e?.name!=='AbortError')toast('Computer connection failed');
+      if(e?.name!=='AbortError')toast('Computer connection failed: '+(e?.message||'Native folder picker unavailable'));
       return false;
     }
   }
-  async function tryWindowsConnectorSave(filename,content){
-    try{
-      const base='http://127.0.0.1:8765';
-      let status=await fetch(base+'/status',{cache:'no-store'}).then(r=>r.ok?r.json():null);
-      if(!status?.ok)return null;
-      if(!status.connected){
-        const chosen=await fetch(base+'/choose',{method:'POST'}).then(r=>r.ok?r.json():null);
-        if(!chosen?.ok)return false;
-        status=chosen;
-      }
-      let contentBase64='';
-      if(content instanceof Blob){
-        const bytes=new Uint8Array(await content.arrayBuffer());
-        let binary='';
-        const chunk=0x8000;
-        for(let i=0;i<bytes.length;i+=chunk)binary+=String.fromCharCode(...bytes.subarray(i,i+chunk));
-        contentBase64=btoa(binary);
-      }else{
-        contentBase64=btoa(unescape(encodeURIComponent(String(content??''))));
-      }
-      const body={filename,contentBase64};
-      const result=await fetch(base+'/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}).then(r=>r.ok?r.json():null);
-      if(result?.ok){toast(`✓ Saved to Windows folder: ${filename}`);return true;}
-      return false;
-    }catch(e){return null}
-  }
-  async function backupPayload(){
-    // Native SQLite is lazy-loaded in memory, so a portable JSON backup must
-    // page through the canonical database instead of serializing only the
-    // currently visible UI windows. Older attachment blobs are hydrated page-by-page
-    // during native lazy loads and are included in the record payload.
-    const snapshot=(NATIVE_RUNTIME&&window.omDb?.exportAll)?await window.omDb.exportAll():null;
-    if(snapshot)return {lifeOSBackup:'LifeOS',version:4,exportedAt:new Date().toISOString(),data:snapshot};
-    await hydrateAttachmentsFromIDB(data);
-    return {lifeOSBackup:'LifeOS',version:4,exportedAt:new Date().toISOString(),data:data};
-  }
-  async function backupJson(){return JSON.stringify(await backupPayload(),null,2)}
-  function htmlEscapeAttr(s){return esc(String(s??''))}
-  function valueToHtml(value,depth=0){
-    if(depth>6)return '<em>…</em>';
-    if(value===null||value===undefined)return '<span class="muted">null</span>';
-    if(typeof value==='object'){
-      if(Array.isArray(value))return value.length?`<ol>${value.map(v=>`<li>${valueToHtml(v,depth+1)}</li>`).join('')}</ol>`:'<span class="muted">[]</span>';
-      return Object.entries(value).map(([k,v])=>`<div style="margin:4px 0;padding:5px 7px;border-left:2px solid #e0e3e9"><b>${esc(k)}</b>: ${valueToHtml(v,depth+1)}</div>`).join('')||'<span class="muted">{}</span>';
-    }
-    return esc(String(value));
-  }
+
   async function ensureComputerFolderForExport(){
-    /* If this page already has the handle, reuse it. Otherwise open the picker
-       immediately from the user's click so the browser's user-activation is intact. */
-    if(computerDirectoryHandle){
-      if(await ensureComputerPermission(computerDirectoryHandle)){await ensureExportSubfolders(computerDirectoryHandle);return computerDirectoryHandle;}
-      computerDirectoryHandle=null;
+    if(isMobileRuntime())return null;
+    if(!computerDirectoryPath){
+      const ok=await connectComputer();
+      if(!ok)return null;
     }
-    const ok=await connectComputer();
-    if(ok)return computerDirectoryHandle;
-    /* If the picker was not needed because a stored handle was available, try it once. */
-    const stored=await loadComputerConnection();
-    if(stored && await ensureComputerPermission(stored)){computerDirectoryHandle=stored;await ensureExportSubfolders(stored);return stored;}
-    return null;
+    return computerDirectoryPath;
   }
-  async function ensureExportSubfolders(handle){
-    if(!handle)return false;
-    for(const name of ['Word','Excel','PDF','Backup']) await handle.getDirectoryHandle(name,{create:true});
-    return true;
-  }
+
   async function saveComputerForExport(filename,content,mime,subfolder=''){
     if(isMobileRuntime())return saveBlobForMobile(filename,content,mime);
-    const handle=await ensureComputerFolderForExport();
-    if(!handle)return false;
+
+    const root=await ensureComputerFolderForExport();
+    if(!root)return false;
+
     try{
-      /* The user selects ONE root folder once. LifeOS creates/reuses a dedicated
-         subfolder for each export format, so files stay organised and print-ready. */
-      const target=String(subfolder||'').trim();
-      const dir=target ? await handle.getDirectoryHandle(target,{create:true}) : handle;
-      const fileHandle=await dir.getFileHandle(filename,{create:true});
-      const writable=await fileHandle.createWritable();
-      await writable.write(content instanceof Blob ? content : new Blob([content],{type:mime||'application/octet-stream'}));
-      await writable.close();
-      toast(`✓ Saved to ${handle.name}/${target||''}: ${filename}`);
+      const blob=content instanceof Blob
+        ? content
+        : new Blob([content],{type:mime||'application/octet-stream'});
+      const bytes=new Uint8Array(await blob.arrayBuffer());
+      const savedPath=await nativeInvoke('save_export_file',{
+        root,
+        subfolder:String(subfolder||'').trim(),
+        filename:String(filename),
+        bytes:Array.from(bytes)
+      });
+      toast(`✓ Saved: ${savedPath}`);
       return true;
     }catch(e){
-      console.error('Computer folder save failed',e);
-      toast('Save failed: '+(e?.message||'Folder permission/error'));
+      console.error('Native computer folder save failed',e);
+      const message=e?.message||String(e)||'Folder permission/error';
+      /* If the previously selected folder was deleted/moved, clear it so the
+         next export forces a fresh native folder selection instead of looping. */
+      if(/no longer exists|not found|cannot find|could not find/i.test(message)){
+        await clearComputerConnection();
+      }
+      toast('Save failed: '+message);
       return false;
     }
   }
+
+  loadComputerConnection();
+
   window.exportLifeOSBackup=async function(){
     try{
       const name='LifeOS_Backup_'+today()+'.json',json=await backupJson();
@@ -178,7 +121,7 @@
       toast('✓ JSON backup saved to selected folder');
     }catch(e){console.error(e);toast('Backup export failed: '+(e?.message||'Unknown error'))}
   };
-  function isMobileRuntime(){return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent||'')||window.innerWidth<=700}
+  function isMobileRuntime(){return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent||'')}
   window.lifeosIsMobileRuntime=isMobileRuntime;
   async function saveBlobForMobile(filename,content,mime){
     const blob=content instanceof Blob?content:new Blob([content],{type:mime||'application/octet-stream'});
@@ -306,7 +249,7 @@ const t=new Uint32Array(256);for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)
     if(id==='expenses')return exportRecordsFromArray([...(data.expenses||[]),...(data.income||[]).map(x=>({...x,recordType:'Income'}))]);
     if(LIFEOS_CATEGORIES[id])return exportCategoryRecords(id);
     if(id==='settings')return Object.entries(data.settings||{}).map(([key,value])=>({Setting:key,Value:exportSafeValue(value)}));
-    if(id==='device-storage')return [{Storage:'Browser Local Storage',Status:'Active'},{Storage:'IndexedDB Device Storage',Status:'Available in supported browsers'},{Storage:'Computer Folder',Status:computerDirectoryHandle?'Connected':'Not connected'}];
+    if(id==='device-storage')return [{Storage:'Browser Local Storage',Status:'Active'},{Storage:'IndexedDB Device Storage',Status:'Available in supported browsers'},{Storage:'Computer Folder',Status:computerConnected()?'Connected':'Not connected'}];
     return [];
   }
   function exportSections(){
