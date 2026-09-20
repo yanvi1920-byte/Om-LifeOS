@@ -1,3 +1,4 @@
+
   /* LifeOS Backup & Export + direct computer folder bridge */
   const COMPUTER_DB='lifeos-computer-connector-v1';
   const COMPUTER_STORE='connection';
@@ -109,8 +110,14 @@
     }catch(e){return null}
   }
   async function backupPayload(){
+    // Native SQLite is lazy-loaded in memory, so a portable JSON backup must
+    // page through the canonical database instead of serializing only the
+    // currently visible UI windows. Older attachment blobs are hydrated page-by-page
+    // during native lazy loads and are included in the record payload.
+    const snapshot=(NATIVE_RUNTIME&&window.omDb?.exportAll)?await window.omDb.exportAll():null;
+    if(snapshot)return {lifeOSBackup:'LifeOS',version:4,exportedAt:new Date().toISOString(),data:snapshot};
     await hydrateAttachmentsFromIDB(data);
-    return {lifeOSBackup:'LifeOS',version:3,exportedAt:new Date().toISOString(),data:data};
+    return {lifeOSBackup:'LifeOS',version:4,exportedAt:new Date().toISOString(),data:data};
   }
   async function backupJson(){return JSON.stringify(await backupPayload(),null,2)}
   function htmlEscapeAttr(s){return esc(String(s??''))}
@@ -522,6 +529,192 @@ const t=new Uint32Array(256);for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)
       if(ok){commitExportState('pdf',currentExportStateSections());toast('✓ PDF में सिर्फ नया/updated data saved');}
     }catch(e){console.error(e);toast('PDF export failed: '+(e?.message||'Unknown error'))}
   };
+  /* Universal document/data importer: Excel (.xlsx/.xls), Word (.docx/.doc) and PDF.
+     Imported content is added safely without replacing existing LifeOS data. */
+  async function importReadFileBytes(file){ return new Uint8Array(await file.arrayBuffer()); }
+  function importU16(b,o){ return b[o]|(b[o+1]<<8); }
+  function importU32(b,o){ return (b[o]|(b[o+1]<<8)|(b[o+2]<<16)|(b[o+3]<<24))>>>0; }
+  async function importInflateRaw(bytes){
+    if(typeof DecompressionStream==='undefined') throw new Error('This runtime cannot decompress ZIP files');
+    const ds=new DecompressionStream('deflate-raw');
+    const stream=new Blob([bytes]).stream().pipeThrough(ds);
+    return new Uint8Array(await new Response(stream).arrayBuffer());
+  }
+  async function importZipEntries(bytes){
+    const out=new Map(); let p=0, guard=0;
+    while(p+30<=bytes.length && guard++<20000){
+      if(importU32(bytes,p)!==0x04034b50) break;
+      const method=importU16(bytes,p+8), csize=importU32(bytes,p+18), usize=importU32(bytes,p+22);
+      const nlen=importU16(bytes,p+26), xlen=importU16(bytes,p+28);
+      const name=new TextDecoder().decode(bytes.slice(p+30,p+30+nlen));
+      const start=p+30+nlen+xlen, raw=bytes.slice(start,start+csize);
+      let value;
+      if(method===0) value=raw;
+      else if(method===8) value=await importInflateRaw(raw);
+      else { p=start+csize; continue; }
+      if(usize && value.length!==usize) console.warn('ZIP size mismatch',name);
+      out.set(name,value); p=start+csize;
+    }
+    return out;
+  }
+  function importXml(bytes){ return new DOMParser().parseFromString(new TextDecoder().decode(bytes),'application/xml'); }
+  function importXmlText(node){
+    return String(node?.textContent||'').replace(/\s+/g,' ').trim();
+  }
+  function importEscPdfText(s){
+    return String(s||'').replace(/\\([\\()])/g,'$1').replace(/\\n/g,'\n').replace(/\\r/g,'\r').replace(/\\t/g,'\t').replace(/\\([0-7]{1,3})/g,(_,o)=>String.fromCharCode(parseInt(o,8)));
+  }
+  async function importDocxText(file){
+    const z=await importZipEntries(await importReadFileBytes(file));
+    const xml=z.get('word/document.xml'); if(!xml) throw new Error('DOCX document.xml not found');
+    const doc=importXml(xml);
+    return Array.from(doc.getElementsByTagName('w:p')).map(p=>importXmlText(p)).filter(Boolean).join('\n');
+  }
+  async function importXlsxRows(file){
+    const z=await importZipEntries(await importReadFileBytes(file));
+    const shared=[];
+    const ss=z.get('xl/sharedStrings.xml');
+    if(ss){
+      const doc=importXml(ss);
+      Array.from(doc.getElementsByTagName('si')).forEach(si=>shared.push(
+        Array.from(si.getElementsByTagName('t')).map(t=>t.textContent||'').join('')
+      ));
+    }
+    const workbook=z.get('xl/workbook.xml');
+    if(!workbook) throw new Error('XLSX workbook.xml not found');
+    const wb=importXml(workbook), relsBytes=z.get('xl/_rels/workbook.xml.rels');
+    const relMap={};
+    if(relsBytes){
+      const rd=importXml(relsBytes);
+      Array.from(rd.getElementsByTagName('Relationship')).forEach(r=>relMap[r.getAttribute('Id')]=r.getAttribute('Target'));
+    }
+    const sheets=Array.from(wb.getElementsByTagName('sheet'));
+    const result=[];
+    for(const sh of sheets){
+      const rid=sh.getAttribute('r:id')||sh.getAttribute('id');
+      let target=relMap[rid]||'';
+      target=target.replace(/^\/+/, '');
+      // OOXML relationship targets may be ../worksheets/sheet1.xml.
+      let path='';
+      if(target){
+        const parts=('xl/'+target).split('/'); const clean=[];
+        for(const part of parts){ if(!part||part==='.') continue; if(part==='..') clean.pop(); else clean.push(part); }
+        path=clean.join('/');
+      }else path='xl/worksheets/sheet'+(result.length+1)+'.xml';
+      const bytes=z.get(path);
+      if(!bytes){ console.warn('Worksheet not found:', path, target); continue; }
+      const doc=importXml(bytes), rows=[];
+      Array.from(doc.getElementsByTagName('row')).forEach(row=>{
+        const vals=[];
+        Array.from(row.getElementsByTagName('c')).forEach(c=>{
+          const ref=c.getAttribute('r')||'';
+          const m=ref.match(/[A-Z]+/); let col=0;
+          if(m){for(const ch of m[0]) col=col*26+ch.charCodeAt(0)-64; col--;}
+          const t=c.getAttribute('t'), v=c.getElementsByTagName('v')[0]?.textContent||'';
+          let value=v;
+          if(t==='s') value=shared[Number(v)]??v;
+          else if(t==='inlineStr') value=Array.from(c.getElementsByTagName('t')).map(x=>x.textContent||'').join('');
+          while(vals.length<col) vals.push('');
+          vals[col]=value;
+        });
+        while(vals.length && vals[vals.length-1]==='') vals.pop();
+        if(vals.length) rows.push(vals);
+      });
+      if(rows.length) result.push({name:sh.getAttribute('name')||`Sheet ${result.length+1}`,rows});
+    }
+    return result;
+  }
+  async function importPdfText(file){
+    const bytes=await importReadFileBytes(file);
+    const latin=new TextDecoder('latin1').decode(bytes);
+    const chunks=[]; let foundStream=false, cursor=0;
+    const streamRe=/stream\r?\n/g; let m;
+    while((m=streamRe.exec(latin))){
+      foundStream=true; const start=m.index+m[0].length, end=latin.indexOf('endstream',start); if(end<0) break;
+      let raw=bytes.slice(start,end);
+      const header=latin.slice(Math.max(0,m.index-500),m.index);
+      if(/\/FlateDecode/.test(header)){
+        try{ raw=await importInflateRaw(raw); }catch(_){ raw=null; }
+      }
+      if(raw){
+        const txt=new TextDecoder('latin1').decode(raw);
+        for(const x of txt.matchAll(/\((?:\\.|[^\\()])*\)\s*Tj/g)) chunks.push(importEscPdfText(x[0].replace(/\)\s*Tj$/,'').slice(1)));
+        for(const x of txt.matchAll(/\[(.*?)\]\s*TJ/gs)){
+          const parts=x[1].match(/\((?:\\.|[^\\()])*\)/g)||[];
+          if(parts.length) chunks.push(parts.map(v=>importEscPdfText(v.slice(1,-1))).join(''));
+        }
+      }
+      cursor=end+9;
+    }
+    if(!chunks.length){
+      const fallback=latin.match(/\((?:\\.|[^\\()]){2,}\)/g)||[];
+      chunks.push(...fallback.slice(0,500).map(v=>importEscPdfText(v.slice(1,-1))));
+    }
+    return chunks.join('\n').replace(/\n{3,}/g,'\n\n').trim();
+  }
+  function importAddNote(title,body,category='Imported Data'){
+    const text=String(body||'').trim(); if(!text) return false;
+    const note={id:uid(),title:title||'Imported document',body:text,html:'',points:'',category,tags:'imported',color:'#eef5ff',date:today(),images:[]};
+    data.notes.unshift(note); return true;
+  }
+  function importNumber(v){const n=Number(String(v??'').replace(/[,₹$€£\s]/g,''));return Number.isFinite(n)?Math.abs(n):0;}
+  function importExcelToLifeOS(sheets,mode='auto'){
+    let imported=0,structuredTasks=0,structuredExpenses=0,structuredIncome=0;
+    let dirtyTasks=false,dirtyExpenses=false,dirtyIncome=false,dirtyNotes=false;
+    for(const sheet of sheets){
+      const rows=sheet.rows||[];if(!rows.length)continue;
+      const headers=rows[0].map(x=>String(x??'').trim());
+      const norm=headers.map(x=>x.toLowerCase().replace(/[^a-z0-9]+/g,''));
+      const idx=names=>norm.findIndex(h=>names.includes(h));
+      const titleI=idx(['title','task','taskname','name','subject','description','particular','details','narration']);
+      const amountI=idx(['amount','expense','cost','value','price','debit','credit','money','total']);
+      const expenseI=idx(['expense','expenses','cost','debit','spent','spending']);
+      const incomeI=idx(['income','incomes','revenue','earning','earnings','credit','received','receipts','salary']);
+      const dateI=idx(['date','day','targetdate','duedate','transactiondate','entrydate']);
+      const statusI=idx(['status','state']);
+      const catI=idx(['category','cat','type','source','account','vendor','payee']);
+      const typeI=idx(['type','transactiontype','recordtype','flow','nature']);
+      const addExpense=(r,c)=>{const amount=importNumber(r[c]);if(amount<=0)return;data.expenses.unshift({id:uid(),source:catI>=0?String(r[catI]??'Imported'):'Imported',amount,date:dateI>=0?String(r[dateI]??''):today(),note:titleI>=0?String(r[titleI]??''):''});structuredExpenses++;dirtyExpenses=true;};
+      const addIncome=(r,c)=>{const amount=importNumber(r[c]);if(amount<=0)return;data.income.unshift({id:uid(),source:catI>=0?String(r[catI]??'Imported'):'Imported',amount,date:dateI>=0?String(r[dateI]??''):today(),note:titleI>=0?String(r[titleI]??''):''});structuredIncome++;dirtyIncome=true;};
+      if(mode==='tasks'||(mode==='auto'&&titleI>=0&&statusI>=0)){for(const r of rows.slice(1)){const title=String(r[titleI]??'').trim();if(!title)continue;data.tasks.unshift({id:uid(),title,category:catI>=0?String(r[catI]??''):'',date:dateI>=0?String(r[dateI]??''):today(),time:'',priority:'Medium',tags:'imported',done:/done|complete|completed|finished|yes|true|1/i.test(String(r[statusI]||''))});structuredTasks++;dirtyTasks=true;}continue;}
+      if(mode==='expenses'){for(const r of rows.slice(1))addExpense(r,expenseI>=0?expenseI:amountI);continue;}
+      if(mode==='income'){for(const r of rows.slice(1))addIncome(r,incomeI>=0?incomeI:amountI);continue;}
+      if(mode==='notes'){const body=rows.map(r=>r.map(v=>String(v??'')).join(' | ')).join('\n');if(importAddNote(`Imported Excel — ${sheet.name}`,body,'Imported Excel')){imported++;dirtyNotes=true;}continue;}
+      if(mode==='auto'&&(expenseI>=0||incomeI>=0)){for(const r of rows.slice(1)){if(expenseI>=0)addExpense(r,expenseI);if(incomeI>=0)addIncome(r,incomeI);if(expenseI<0&&incomeI<0&&typeI>=0&&/expense|debit|spent|cost/i.test(String(r[typeI]||'')))addExpense(r,amountI);if(expenseI<0&&incomeI<0&&typeI>=0&&/income|credit|received|revenue|earning/i.test(String(r[typeI]||'')))addIncome(r,amountI);}continue;}
+      if(mode==='auto'&&amountI>=0){for(const r of rows.slice(1)){const typ=typeI>=0?String(r[typeI]||'').toLowerCase():'';if(/income|credit|received|revenue|earning|salary/.test(typ))addIncome(r,amountI);else addExpense(r,amountI);}continue;}
+      const body=rows.map(r=>r.map(v=>String(v??'')).join(' | ')).join('\n');if(importAddNote(`Imported Excel — ${sheet.name}`,body,'Imported Excel')){imported++;dirtyNotes=true;}
+    }
+    if(dirtyTasks)__dirtySections.add('tasks');if(dirtyExpenses)__dirtySections.add('expenses');if(dirtyIncome)__dirtySections.add('income');if(dirtyNotes)__dirtySections.add('notes');
+    return {imported,structuredTasks,structuredExpenses,structuredIncome};
+  }
+  window.importLifeOSDocuments=async function(input){
+    const files=[...(input?.files||[])]; if(!files.length) return;
+      const mode=(document.getElementById('lifeosImportMode')?.value||'auto').toLowerCase();
+    try{
+      let notes=0, tasks=0, expenses=0, income=0, filesDone=0;
+      for(const file of files){
+        const name=file.name||'Imported file', ext=(name.split('.').pop()||'').toLowerCase();
+        if(ext==='xlsx'){
+          const sheets=await importXlsxRows(file); const r=importExcelToLifeOS(sheets,mode);
+          notes+=r.imported; tasks+=r.structuredTasks; expenses+=r.structuredExpenses; if(r.structuredIncome) income+=r.structuredIncome;
+        }else if(ext==='xls'){
+          throw new Error('Legacy .xls (BIFF) is not supported by the browser importer yet. Save the workbook as .xlsx, then import it with the selected destination.');
+        }else if(ext==='docx'){
+          const text=await importDocxText(file); if(importAddNote(name.replace(/\.docx$/i,''),text,'Imported Word')) notes++;
+        }else if(ext==='pdf'){
+          const text=await importPdfText(file); if(importAddNote(name.replace(/\.pdf$/i,''),text,'Imported PDF')) notes++;
+        }else if(ext==='doc'){
+          throw new Error('.doc legacy format is not supported directly; save it as .docx first.');
+        }else throw new Error(`Unsupported file: ${name}`);
+        filesDone++;
+      }
+      save();
+      render(); renderSettings();
+      save(); render(); toast(`✓ ${filesDone} file imported · ${notes} notes · ${tasks} tasks · ${expenses} expenses · ${income} income`);
+    }catch(e){ console.error('Universal import failed',e); toast('Import failed: '+(e?.message||'Unsupported/invalid file')); }
+    finally{if(input)input.value='';}
+  };
+
   window.importLifeOSBackup=function(input){
     const file=input?.files?.[0];if(!file)return;
     const reader=new FileReader();
@@ -530,12 +723,14 @@ const t=new Uint32Array(256);for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)
         const payload=JSON.parse(String(reader.result||''));
         if(!payload||payload.lifeOSBackup!=='LifeOS'||!payload.data||typeof payload.data!=='object')throw new Error('Invalid backup');
         if(!confirm('Import this LifeOS backup? Current LifeOS data will be replaced by the backup.')){input.value='';return;}
-        data=payload.data;
+        data=makeReactiveData(payload.data);
         data.__drafts=(data.__drafts&&typeof data.__drafts==='object')?data.__drafts:{};
         data.settings=(data.settings&&typeof data.settings==='object')?data.settings:{mode:'light'};
         data.categories=(data.categories&&typeof data.categories==='object')?data.categories:{};
-        await persistDeviceNow();deviceStorageReady=true;
-        await persistLocalNow();
+        __dirtySections.clear();
+        for(const k of ['tasks','notes','journal','expenses','income','habits','routines','goals','focusSessions','personal','professional','spiritual','economical','mental','social','moral'])__dirtySections.add(k);
+        if(window.omDb?.saveSnapshot) await window.omDb.saveSnapshot(data,{sections:['tasks','notes','journal','expenses','income','habits','routines','goals','focusSessions','personal','professional','spiritual','economical','mental','social','moral']});
+        await persistDeviceNow();
         input.value='';render();renderSettings();toast('✓ LifeOS backup imported');
       }catch(e){input.value='';toast('Invalid LifeOS backup file')}
     };
@@ -556,3 +751,4 @@ const t=new Uint32Array(256);for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)
   window.renderDeviceStorage=function(){const el=document.getElementById('device-storage');if(!el)return;const mobile=isMobileRuntime();el.innerHTML=`<div class="hero"><h2>💾 Device Storage</h2><p class="muted">${mobile?'LifeOS keeps app data in its private app storage. Backups can be saved to Downloads or shared to another device.':'LifeOS uses native SQLite plus browser storage fallback.'}</p></div><div class="grid"><div class="card"><h3>App storage</h3><p class="muted">IndexedDB + SQLite: Active</p></div><div class="card"><h3>Downloads</h3><p class="muted">${mobile?'JSON backups can be saved to the Android Downloads folder.':'Computer exports use the connected folder.'}</p></div><div class="card"><h3>Permissions</h3><p class="muted">${mobile?'Only the Downloads file access needed for backup is used; no broad file browsing is required.':'Desktop folder access is requested only when you connect a folder.'}</p></div></div><div class="card"><h3>Backup</h3><p class="muted">Export JSON Backup for a complete portable backup. Import accepts the same JSON backup file.</p><div class="row"><button class="primary" type="button" onclick="window.exportLifeOSBackup()">⬇️ Export JSON Backup</button></div></div>`};
   window.connectComputer=connectComputer;
   window.disconnectComputer=clearComputerConnection;
+

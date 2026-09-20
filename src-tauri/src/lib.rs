@@ -1,4 +1,4 @@
-use rusqlite::{params, Connection, OptionalExtension};
+use rusqlite::{backup::Backup, params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use std::{fs, path::PathBuf, sync::Mutex};
 use tauri::{AppHandle, Manager, State};
@@ -115,22 +115,141 @@ fn db_delete_record(state: State<'_, DbState>, section: String, record_id: Strin
 }
 
 #[tauri::command]
-fn db_list_records(state: State<'_, DbState>, section: String, limit: i64, offset: i64, from_date: Option<String>, to_date: Option<String>) -> Result<Vec<DbRecord>, String> {
+fn db_delete_records(state: State<'_, DbState>, section: String, record_ids: Vec<String>) -> Result<usize, String> {
+    if record_ids.is_empty() { return Ok(0); }
+    let mut conn = state.0.lock().map_err(|_| "Database lock poisoned".to_string())?;
+    let tx = conn.transaction().map_err(|e| e.to_string())?;
+    let mut stmt = tx.prepare("DELETE FROM records WHERE section=?1 AND record_id=?2").map_err(|e| e.to_string())?;
+    let mut deleted = 0usize;
+    for id in &record_ids {
+        deleted += stmt.execute(params![section, id]).map_err(|e| e.to_string())?;
+    }
+    drop(stmt);
+    tx.commit().map_err(|e| e.to_string())?;
+    Ok(deleted)
+}
+
+fn online_backup(app: &AppHandle, target: &PathBuf) -> Result<String, String> {
+    if let Some(parent) = target.parent() { fs::create_dir_all(parent).map_err(|e| e.to_string())?; }
+    let source_path = db_path(app)?;
+    let tmp = target.with_extension("sqlite3.partial");
+    let _ = fs::remove_file(&tmp);
+
+    // IMPORTANT: use SQLite's Online Backup API rather than copying the live
+    // database file. This keeps the source writable while the snapshot is made.
+    let source = Connection::open(&source_path).map_err(|e| e.to_string())?;
+    configure(&source)?;
+    let mut destination = Connection::open(&tmp).map_err(|e| e.to_string())?;
+    configure(&destination)?;
+    {
+        let backup = Backup::new(&source, &mut destination).map_err(|e| e.to_string())?;
+        // Small chunks + a pause keep I/O responsive during large backups.
+        backup.run_to_completion(64, std::time::Duration::from_millis(8), None)
+            .map_err(|e| e.to_string())?;
+    }
+    destination.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);").map_err(|e| e.to_string())?;
+    drop(destination);
+    drop(source);
+
+    // Validate the completed snapshot before replacing the visible backup.
+    let check = Connection::open(&tmp).map_err(|e| e.to_string())?;
+    let integrity: String = check.query_row("PRAGMA integrity_check", [], |r| r.get(0)).map_err(|e| e.to_string())?;
+    drop(check);
+    if integrity != "ok" {
+        let _ = fs::remove_file(&tmp);
+        return Err(format!("Backup integrity check failed: {integrity}"));
+    }
+
+    // Never expose a half-written backup as a finished backup.
+    if target.exists() { fs::remove_file(target).map_err(|e| e.to_string())?; }
+    fs::rename(&tmp, target).map_err(|e| e.to_string())?;
+    Ok(target.to_string_lossy().into_owned())
+}
+
+#[tauri::command]
+fn db_backup_to(app: AppHandle, target: String) -> Result<String, String> {
+    let target = PathBuf::from(target);
+    if target.as_os_str().is_empty() { return Err("Backup target is empty".into()); }
+    // Snapshot from a separate read connection. Do not run PRAGMA optimize on the live
+    // connection here; backups must never make the foreground write path wait for maintenance.
+    online_backup(&app, &target)
+}
+
+#[tauri::command]
+fn db_auto_backup(app: AppHandle, state: State<'_, DbState>) -> Result<String, String> {
+    let root = app.path().document_dir().map_err(|e| e.to_string())?;
+    let dir = root.join("Om-LifeOS").join("DatabaseBackups");
+    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+
+    // Do not copy anything when no data changed since the last automatic snapshot.
+    let current_stamp: i64 = {
+        let conn = state.0.lock().map_err(|_| "Database lock poisoned".to_string())?;
+        conn.query_row("SELECT CAST(value AS INTEGER) FROM meta WHERE key='last_data_saved_at'", [], |r| r.get(0)).unwrap_or(0)
+    };
+    let previous_stamp: i64 = {
+        let conn = state.0.lock().map_err(|_| "Database lock poisoned".to_string())?;
+        conn.query_row("SELECT CAST(value AS INTEGER) FROM meta WHERE key='last_auto_backup_stamp'", [], |r| r.get(0)).unwrap_or(0)
+    };
+    if current_stamp > 0 && current_stamp == previous_stamp {
+        return Ok(String::new());
+    }
+
+    let stamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)
+        .map_err(|e| e.to_string())?;
+    let target = dir.join(format!("om-lifeos-{}-{}.sqlite3", stamp.as_secs(), stamp.subsec_millis()));
+    let saved = online_backup(&app, &target)?;
+
+    {
+        let conn = state.0.lock().map_err(|_| "Database lock poisoned".to_string())?;
+        conn.execute("INSERT INTO meta(key,value,updated_at) VALUES('last_auto_backup_stamp',?1,?2) ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at",
+            params![current_stamp.to_string(), stamp.as_secs() as i64]).map_err(|e| e.to_string())?;
+    }
+
+    // Keep a bounded rolling history.
+    let mut files: Vec<_> = fs::read_dir(&dir).map_err(|e| e.to_string())?
+        .filter_map(|e| e.ok()).filter(|e| e.path().extension().and_then(|x| x.to_str()) == Some("sqlite3"))
+        .collect();
+    files.sort_by_key(|e| e.metadata().and_then(|m| m.modified()).ok());
+    while files.len() > 30 {
+        if let Some(old) = files.first() { let _ = fs::remove_file(old.path()); }
+        files.remove(0);
+    }
+    Ok(saved)
+}
+
+#[tauri::command]
+fn db_list_records(
+    state: State<'_, DbState>, section: String, limit: i64, offset: i64,
+    from_date: Option<String>, to_date: Option<String>,
+    cursor_date: Option<String>, cursor_updated_at: Option<i64>, cursor_record_id: Option<String>
+) -> Result<Vec<DbRecord>, String> {
     let conn = state.0.lock().map_err(|_| "Database lock poisoned".to_string())?;
     let limit = limit.clamp(1, 1000);
     let offset = offset.max(0);
+    let has_cursor = cursor_updated_at.is_some() && cursor_record_id.is_some();
+    let cursor_date = cursor_date.unwrap_or_default();
+    let cursor_updated_at = cursor_updated_at.unwrap_or(i64::MAX);
+    let cursor_record_id = cursor_record_id.unwrap_or_default();
     let mut out = Vec::new();
-    match (from_date, to_date) {
-        (Some(from), Some(to)) => {
-            let mut st = conn.prepare("SELECT section,record_id,date_key,updated_at,payload FROM records WHERE section=?1 AND date_key>=?2 AND date_key<=?3 ORDER BY date_key DESC, updated_at DESC LIMIT ?4 OFFSET ?5").map_err(|e| e.to_string())?;
-            let rows = st.query_map(params![section, from, to, limit, offset], |r| Ok(DbRecord{section:r.get(0)?,record_id:r.get(1)?,date_key:r.get(2)?,updated_at:r.get(3)?,payload:r.get(4)?})).map_err(|e| e.to_string())?;
-            for row in rows { out.push(row.map_err(|e| e.to_string())?); }
-        }
-        _ => {
-            let mut st = conn.prepare("SELECT section,record_id,date_key,updated_at,payload FROM records WHERE section=?1 ORDER BY date_key DESC, updated_at DESC LIMIT ?2 OFFSET ?3").map_err(|e| e.to_string())?;
-            let rows = st.query_map(params![section, limit, offset], |r| Ok(DbRecord{section:r.get(0)?,record_id:r.get(1)?,date_key:r.get(2)?,updated_at:r.get(3)?,payload:r.get(4)?})).map_err(|e| e.to_string())?;
-            for row in rows { out.push(row.map_err(|e| e.to_string())?); }
-        }
+    let mut collect = |sql: &str, bind: &[&dyn rusqlite::ToSql]| -> Result<(), String> {
+        let mut st = conn.prepare(sql).map_err(|e| e.to_string())?;
+        let rows = st.query_map(bind, |r| Ok(DbRecord{section:r.get(0)?,record_id:r.get(1)?,date_key:r.get(2)?,updated_at:r.get(3)?,payload:r.get(4)?})).map_err(|e| e.to_string())?;
+        for row in rows { out.push(row.map_err(|e| e.to_string())?); }
+        Ok(())
+    };
+    match (from_date, to_date, has_cursor) {
+        (Some(from), Some(to), true) => collect(
+            "SELECT section,record_id,date_key,updated_at,payload FROM records WHERE section=?1 AND date_key>=?2 AND date_key<=?3 AND (COALESCE(date_key,'') < ?4 OR (COALESCE(date_key,'')=?4 AND updated_at < ?5) OR (COALESCE(date_key,'')=?4 AND updated_at=?5 AND record_id < ?6)) ORDER BY date_key DESC, updated_at DESC, record_id DESC LIMIT ?7",
+            &[&section,&from,&to,&cursor_date,&cursor_updated_at,&cursor_record_id,&limit])?,
+        (Some(from), Some(to), false) => collect(
+            "SELECT section,record_id,date_key,updated_at,payload FROM records WHERE section=?1 AND date_key>=?2 AND date_key<=?3 ORDER BY date_key DESC, updated_at DESC, record_id DESC LIMIT ?4 OFFSET ?5",
+            &[&section,&from,&to,&limit,&offset])?,
+        (_, _, true) => collect(
+            "SELECT section,record_id,date_key,updated_at,payload FROM records WHERE section=?1 AND (COALESCE(date_key,'') < ?2 OR (COALESCE(date_key,'')=?2 AND updated_at < ?3) OR (COALESCE(date_key,'')=?2 AND updated_at=?3 AND record_id < ?4)) ORDER BY date_key DESC, updated_at DESC, record_id DESC LIMIT ?5",
+            &[&section,&cursor_date,&cursor_updated_at,&cursor_record_id,&limit])?,
+        _ => collect(
+            "SELECT section,record_id,date_key,updated_at,payload FROM records WHERE section=?1 ORDER BY date_key DESC, updated_at DESC, record_id DESC LIMIT ?2 OFFSET ?3",
+            &[&section,&limit,&offset])?,
     }
     Ok(out)
 }
@@ -143,6 +262,12 @@ fn db_list_record_ids(state: State<'_, DbState>, section: String) -> Result<Vec<
     let mut out = Vec::new();
     for row in rows { out.push(row.map_err(|e| e.to_string())?); }
     Ok(out)
+}
+
+#[tauri::command]
+fn db_total_count(state: State<'_, DbState>) -> Result<i64, String> {
+    let conn = state.0.lock().map_err(|_| "Database lock poisoned".to_string())?;
+    conn.query_row("SELECT COUNT(*) FROM records", [], |r| r.get(0)).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -169,6 +294,39 @@ fn db_get_record(state: State<'_, DbState>, section: String, record_id: String) 
     conn.query_row("SELECT section,record_id,date_key,updated_at,payload FROM records WHERE section=?1 AND record_id=?2", params![section, record_id], |r| Ok(DbRecord{section:r.get(0)?,record_id:r.get(1)?,date_key:r.get(2)?,updated_at:r.get(3)?,payload:r.get(4)?})).optional().map_err(|e| e.to_string())
 }
 
+#[derive(Debug, Serialize)]
+struct FinanceSummary {
+    from_date: String,
+    to_date: String,
+    income: f64,
+    expense: f64,
+}
+
+#[tauri::command]
+fn db_finance_summary(state: State<'_, DbState>, from_date: String, to_date: String) -> Result<FinanceSummary, String> {
+    let conn = state.0.lock().map_err(|_| "Database lock poisoned".to_string())?;
+    let sum_section = |section: &str| -> Result<f64, String> {
+        let mut st = conn.prepare("SELECT payload FROM records WHERE section=?1 AND date_key>=?2 AND date_key<=?3")
+            .map_err(|e| e.to_string())?;
+        let rows = st.query_map(params![section, from_date, to_date], |r| r.get::<_, String>(0))
+            .map_err(|e| e.to_string())?;
+        let mut total = 0.0_f64;
+        for row in rows {
+            let payload = row.map_err(|e| e.to_string())?;
+            if let Ok(v) = serde_json::from_str::<serde_json::Value>(&payload) {
+                total += v.get("amount").and_then(|x| x.as_f64()).unwrap_or(0.0);
+            }
+        }
+        Ok(total)
+    };
+    Ok(FinanceSummary {
+        from_date: from_date.clone(),
+        to_date: to_date.clone(),
+        income: sum_section("income")?,
+        expense: sum_section("expenses")?,
+    })
+}
+
 #[tauri::command]
 fn db_set_meta(state: State<'_, DbState>, key: String, value: String, updated_at: i64) -> Result<(), String> {
     let conn = state.0.lock().map_err(|_| "Database lock poisoned".to_string())?;
@@ -180,6 +338,12 @@ fn db_set_meta(state: State<'_, DbState>, key: String, value: String, updated_at
 fn db_get_meta(state: State<'_, DbState>, key: String) -> Result<Option<String>, String> {
     let conn = state.0.lock().map_err(|_| "Database lock poisoned".to_string())?;
     conn.query_row("SELECT value FROM meta WHERE key=?1", params![key], |r| r.get(0)).optional().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn db_get_meta_stamp(state: State<'_, DbState>, key: String) -> Result<Option<i64>, String> {
+    let conn = state.0.lock().map_err(|_| "Database lock poisoned".to_string())?;
+    conn.query_row("SELECT updated_at FROM meta WHERE key=?1", params![key], |r| r.get(0)).optional().map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -207,8 +371,8 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            db_init, db_upsert_record, db_upsert_records, db_delete_record, db_list_records, db_list_record_ids,
-            db_count_records, db_search_records, db_get_record, db_set_meta, db_get_meta,
+            db_init, db_total_count, db_upsert_record, db_upsert_records, db_delete_record, db_delete_records, db_backup_to, db_auto_backup, db_list_records, db_list_record_ids,
+            db_count_records, db_search_records, db_finance_summary, db_get_record, db_set_meta, db_get_meta, db_get_meta_stamp,
             db_checkpoint, db_integrity_check
         ])
         .run(tauri::generate_context!())

@@ -1,13 +1,19 @@
 
 
+
+const LIFEOS_BUILD_VERSION='1.7.1';
+window.__LIFEOS_BUILD_VERSION=LIFEOS_BUILD_VERSION;
+console.info('Om-LifeOS build',LIFEOS_BUILD_VERSION);
 const KEY='lifeos_clean_v5';
+const NATIVE_RUNTIME=Boolean(window.__TAURI_INTERNALS__ && typeof window.__TAURI_INTERNALS__.invoke==='function');
+window.__LIFEOS_NATIVE_RUNTIME=NATIVE_RUNTIME;
 const MAX_LOCAL_BYTES=4_500_000;
 const ATTACH_DB='lifeos-attachments-v2';
 const ATTACH_STORE='files';
 let attachmentDBPromise=null;
 const MAX_IMAGE_BYTES=900_000;
 const MAX_IMAGE_SIDE=1600;
-let data=(()=>{try{return JSON.parse(localStorage.getItem(KEY)||'null')}catch(e){console.warn('LifeOS data was invalid; starting safely',e);return null}})()||{
+let data=(()=>{if(NATIVE_RUNTIME)return null;try{return JSON.parse(localStorage.getItem(KEY)||'null')}catch(e){console.warn('LifeOS data was invalid; starting safely',e);return null}})()||{
  tasks:[],notes:[],journal:[],expenses:[],income:[],habits:[],routines:[],goals:[],
  daily:{},focus:{},financePeriod:'monthly',settings:{mode:'light'},__drafts:{},mentor:{startingCapital:300000,startDate:'',survivalReserve:180000,emergencyReserve:60000,careerFund:30000,opportunityFund:30000,dailyBurn:2000,monthlyBurn:60000,balanceMode:'auto',manualBalance:0},mentorKpis:{}
 };
@@ -19,6 +25,39 @@ data.categories=(data.categories&&typeof data.categories==='object')?data.catego
 data.mentor={...{startingCapital:300000,startDate:'',survivalReserve:180000,emergencyReserve:60000,careerFund:30000,opportunityFund:30000,dailyBurn:2000,monthlyBurn:60000,balanceMode:'auto',manualBalance:0},...(data.mentor||{})};
 data.mentorKpis=(data.mentorKpis&&typeof data.mentorKpis==='object')?data.mentorKpis:{};
 data.mentorQuotes=Array.isArray(data.mentorQuotes)?data.mentorQuotes:[];
+
+// Reactive dirty tracking: mutations mark only the affected top-level data section.
+// This lets the native SQLite mirror write only changed sections instead of
+// serializing/re-writing the entire history after every small edit.
+const __reactiveCache=new WeakMap();
+const __dirtySections=window.__lifeosDirtySections=new Set();
+function makeReactiveData(root){
+  function wrap(value,section){
+    if(!value||typeof value!=='object')return value;
+    if(__reactiveCache.has(value))return __reactiveCache.get(value);
+    const proxy=new Proxy(value,{
+      get(target,key,receiver){
+        const v=Reflect.get(target,key,receiver);
+        const childSection=section==='__root'?String(key):section;
+        return (v&&typeof v==='object')?wrap(v,childSection):v;
+      },
+      set(target,key,value,receiver){
+        const ok=Reflect.set(target,key,value,receiver);
+        if(ok)__dirtySections.add(section==='__root'?String(key):section);
+        return ok;
+      },
+      deleteProperty(target,key){
+        const ok=Reflect.deleteProperty(target,key);
+        if(ok)__dirtySections.add(section==='__root'?String(key):section);
+        return ok;
+      }
+    });
+    __reactiveCache.set(value,proxy);
+    return proxy;
+  }
+  return wrap(root,'__root');
+}
+data=makeReactiveData(data);
 // One-time cleanup: older built-in entries used the label 'Mentor Principle' as an author.
 data.mentorQuotes=data.mentorQuotes.map(q=>({...q,author:String(q?.author||'Mentor')==='Mentor Principle'?'Mentor':(q?.author||'Mentor')}));
 // Normalize/sanitize stored rich text from older versions before it is rendered.
@@ -145,12 +184,61 @@ async function hydrateAttachmentsFromIDB(source=data){
 }
 
 function localSnapshot(source=data){
-  const copy={...source,
-    notes:(source.notes||[]).map(n=>({...n,images:Array.isArray(n.images)?n.images.map(()=>null):[]})),
-    journal:(source.journal||[]).map(j=>({...j,files:Array.isArray(j.files)?j.files.map(f=>({...f,data:null})):[]}))
-  };
-  return copy;
+  // IndexedDB uses structured clone and cannot store our reactive Proxy graph.
+  // Build a strictly cloneable plain-data snapshot. Attachments stay in their
+  // dedicated IndexedDB store, so the app-state record never contains File/Blob
+  // objects or other host objects.
+  const seen=new WeakSet();
+  function plain(value){
+    if(value===null)return null;
+    const type=typeof value;
+    if(type==='string'||type==='number'||type==='boolean')return value;
+    if(type==='bigint')return String(value);
+    if(type==='undefined'||type==='function'||type==='symbol')return undefined;
+    if(type!=='object')return String(value);
+    if(seen.has(value))return null;
+    if(value instanceof Date)return value.toISOString();
+    // Binary/browser host objects are stored separately or intentionally omitted.
+    if(typeof Blob!=='undefined' && value instanceof Blob)return null;
+    if(typeof File!=='undefined' && value instanceof File)return null;
+    if(typeof ArrayBuffer!=='undefined' && value instanceof ArrayBuffer)return null;
+    if(typeof ArrayBuffer!=='undefined' && ArrayBuffer.isView?.(value))return null;
+    seen.add(value);
+    if(Array.isArray(value)){const out=[];for(const item of value){const v=plain(item);out.push(v===undefined?null:v)}seen.delete(value);return out;}
+    const out={};
+    for(const key of Object.keys(value)){
+      // Never drop a generic user/app field named `data`. Only attachment
+      // containers are handled separately below. This prevents silent data loss.
+      if(key==='images'||key==='files')continue;
+      const v=plain(value[key]);
+      if(v!==undefined)out[key]=v;
+    }
+    seen.delete(value);
+    return out;
+  }
+  const copy=plain(source)||{};
+  copy.notes=(Array.isArray(source?.notes)?source.notes:[]).map(n=>{
+    const x=plain(n)||{};
+    x.images=Array.isArray(n?.images)?n.images.map(()=>null):[];
+    return x;
+  });
+  copy.journal=(Array.isArray(source?.journal)?source.journal:[]).map(j=>{
+    const x=plain(j)||{};
+    x.files=Array.isArray(j?.files)?j.files.map(f=>{const y=plain(f)||{};y.data=null;return y;}):[];
+    return x;
+  });
+  // IDB gets a JSON-safe plain graph. This is intentionally stricter than
+  // structuredClone: IndexedDB should never receive a Proxy, File, Blob, Map,
+  // Set, DOM object, class instance, or other host value from the reactive state.
+  try{return JSON.parse(JSON.stringify(copy,(key,value)=>{
+    if(typeof value==='bigint')return String(value);
+    if(typeof value==='function'||typeof value==='symbol')return undefined;
+    return value;
+  }))}catch(_){
+    return {__updatedAt:Number(source?.__updatedAt)||Date.now(),version:1,notes:[],journal:[]};
+  }
 }
+
 const DEVICE_DB='lifeos-device-storage-v1';
 const DEVICE_STORE='app_state';
 let deviceDBPromise=null;
@@ -184,7 +272,11 @@ function readDeviceState(){
 function writeDeviceState(source=data){
   return openDeviceDB().then(db=>new Promise((resolve,reject)=>{
     const tx=db.transaction(DEVICE_STORE,'readwrite');
-    tx.objectStore(DEVICE_STORE).put(localSnapshot(source),'state');
+    const snapshot=localSnapshot(source);
+    // A final browser-native clone probe makes failures deterministic and prevents
+    // an IDB transaction from ever receiving a non-cloneable value.
+    if(typeof structuredClone==='function')structuredClone(snapshot);
+    tx.objectStore(DEVICE_STORE).put(snapshot,'state');
     tx.oncomplete=resolve;
     tx.onerror=()=>reject(tx.error||new Error('Device state save failed'));
   }));
@@ -201,10 +293,17 @@ function persistLocalNow(){
   try{
     data.__updatedAt=Number(data.__updatedAt)||Date.now();
     data.__localSavedAt=Date.now();
-    const raw=JSON.stringify(localSnapshot(data));
-    if(raw.length<=MAX_LOCAL_BYTES){localStorage.setItem(KEY,raw);ok=true}
+    // Once native SQLite is healthy, do not repeatedly stringify the entire
+    // history into localStorage. Keep only a tiny recovery marker there.
+    if(deviceStorageReady && window.omDb){
+      localStorage.setItem(KEY,JSON.stringify({__updatedAt:data.__updatedAt,__nativeSQLite:true,version:2}));
+      ok=true;
+    }else{
+      const raw=JSON.stringify(localSnapshot(data));
+      if(raw.length<=MAX_LOCAL_BYTES){localStorage.setItem(KEY,raw);ok=true}
+    }
   }catch(e){console.warn('localStorage fallback save failed',e)}
-  scheduleDeviceSave(0);
+  scheduleDeviceSave(deviceStorageReady?15000:1200);
   return ok;
 }
 function migrateLegacyCategories(){
@@ -221,37 +320,64 @@ function migrateLegacyCategories(){
     }catch(e){}
   });
 }
+async function migrateLegacyNativeAttachments(){
+  if(!NATIVE_RUNTIME||!window.omDb?.listPage||!window.omDb?.getMeta||!window.omDb?.setMeta||!('indexedDB' in window))return;
+  try{
+    const done=await window.omDb.getMeta('attachments_migrated_v1');
+    if(done==='1')return;
+    for(const key of ['notes','journal']){
+      let cursor=null;
+      do{
+        const page=await window.omDb.listPage(key,{limit:100,cursor});
+        if(!page.length)break;
+        const holder=key==='notes'?{notes:page,journal:[]}:{notes:[],journal:page};
+        const before=JSON.stringify(page);
+        await hydrateAttachmentsFromIDB(holder);
+        if(before!==JSON.stringify(holder[key])) await window.omDb.persistSection(key,holder[key],{force:true});
+        if(page.length<100)break;
+        const last=page[page.length-1];
+        cursor={dateKey:last?.date||last?.createdAt||last?.updatedAt||'',updatedAt:Number(last?.updatedAt||last?.createdAt||0),recordId:String(last?.id||'')};
+      }while(cursor);
+    }
+    await window.omDb.setMeta('attachments_migrated_v1','1');
+    console.info('Om-LifeOS: legacy attachment migration complete');
+  }catch(e){console.warn('Legacy attachment migration deferred',e)}
+}
 async function bootDeviceStorage(){
   requestPersistentDeviceStorage();
   migrateLegacyCategories();
   try{
-    const stored=await readDeviceState();
+    const stored=NATIVE_RUNTIME?null:await readDeviceState();
     if(stored&&typeof stored==='object'){
       const localUpdated=Number(data.__updatedAt)||0;
       const deviceUpdated=Number(stored.__updatedAt)||0;
       if(deviceUpdated>localUpdated){
         const localCategories=data.categories||{};
-        data={...data,...stored,categories:{...localCategories,...(stored.categories||{})}};
+        data=makeReactiveData({...data,...stored,categories:{...localCategories,...(stored.categories||{})}});
       }else if(localUpdated>deviceUpdated){
         await persistDeviceNow();
       }
     }else{
       await persistDeviceNow();
     }
-    deviceStorageReady=true;
-    await persistDeviceNow();
+    deviceStorageReady=!NATIVE_RUNTIME;
+    if(deviceStorageReady)await persistDeviceNow();
   }catch(e){
     deviceStorageReady=false;
     console.warn('Device storage boot failed; local fallback remains active',e);
   }
   // First-run migration to native SQLite; existing data is preserved.
   try{
-    if(window.omDb){
+    if(NATIVE_RUNTIME && window.omDb){
       const mig=await window.omDb.bootstrapFromLegacy(data);
       if(mig?.migrated) console.info('ॐ: migrated legacy records to SQLite',mig.count);
     }
   }catch(e){console.warn('SQLite migration deferred; browser storage remains available',e)}
+  __dirtySections.clear();
   render();
+  if(NATIVE_RUNTIME){
+    window.__lifeosNativeAttachmentMigrationPromise=migrateLegacyNativeAttachments();
+  }
 }
 function scheduleLocalPersist(delay=220){
   clearTimeout(window.__lifeosPersistTimer);
@@ -308,12 +434,21 @@ function compactLifeOSData(){
 function save(){
   data.__updatedAt=Date.now();
   // Native SQLite is the long-life canonical store in the Windows build.
-  if(window.omDb){
+  // Plain browser/local HTML uses IndexedDB/localStorage and must not invoke the Tauri bridge.
+  if(NATIVE_RUNTIME && window.omDb){
     clearTimeout(window.__omDbSaveTimer);
-    window.__omDbSaveTimer=setTimeout(()=>window.omDb.saveSnapshot(data).catch(e=>console.warn('SQLite save failed; browser fallback remains active',e)),180);
+    window.__omDbSaveTimer=setTimeout(()=>{
+      const sections=[...__dirtySections].filter(k=>k&&k!=='__root');
+      const saveStamp=Number(data?.__updatedAt||0);
+      window.omDb.saveSnapshot(data,{sections}).then(()=>{
+        // A second edit may have happened while SQLite was writing. Never clear
+        // a dirty section from an older in-flight save; that could hide the newer edit.
+        if(Number(data?.__updatedAt||0)===saveStamp) sections.forEach(k=>__dirtySections.delete(k));
+      }).catch(e=>console.warn('SQLite save failed; browser fallback remains active',e));
+    },350);
   }
   // IndexedDB remains the attachment/browser fallback layer.
-  scheduleDeviceSave(120);
+  scheduleDeviceSave(deviceStorageReady?15000:1200);
   // Small localStorage bootstrap only; never make large synchronous writes part of the critical path.
   scheduleLocalPersist(deviceStorageReady?5000:300);
 }
@@ -384,15 +519,144 @@ let bsCalendarTarget='today',bsCalendarYear=2083,bsCalendarMonth=1;
 
 function closeBsCalendar(){document.getElementById('bsCalendarModal')?.classList.remove('open');document.body.classList.remove('bs-calendar-open')}
 function moveBsMonth(delta){let y=bsCalendarYear,m=bsCalendarMonth+delta;if(m<1){m=12;y--}if(m>12){m=1;y++}if(BS_DATA[y]){bsCalendarYear=y;bsCalendarMonth=m;renderBsCalendar()}}
-function renderBsCalendar(){const root=document.getElementById('bsCalendarModal');if(!root)return;const months=BS_DATA[bsCalendarYear];if(!months)return;const firstAd=bsToAd(`${bsCalendarYear}-${String(bsCalendarMonth).padStart(2,'0')}-01`);const days=months[bsCalendarMonth-1];const firstDay=new Date(firstAd+'T00:00:00Z').getUTCDay();const selectedAd=document.getElementById(bsCalendarTarget)?.value||'';const currentAd=document.getElementById('today')?.value||today();let cells='';for(let i=0;i<firstDay;i++)cells+='<div></div>';for(let d=1;d<=days;d++){const bsIso=`${bsCalendarYear}-${String(bsCalendarMonth).padStart(2,'0')}-${String(d).padStart(2,'0')}`;const ad=bsToAd(bsIso);const wd=new Date(ad+'T00:00:00Z').getUTCDay();const selected=ad===selectedAd?' selected':'';const isToday=ad===currentAd?' today':'';cells+=`<button type="button" class="bs-day ${wd===6?'sat':''}${selected}${isToday}" onclick="selectBsCalendarDate('${ad}')"><span class="bs-num">${d}</span><span class="ad-num">${ad.slice(8,10)} ${new Date(ad+'T00:00:00Z').toLocaleString('en',{month:'short',timeZone:'UTC'})}</span></button>`;}const monthName=BS_MONTHS[bsCalendarMonth-1];const startAd=bsToAd(`${bsCalendarYear}-${String(bsCalendarMonth).padStart(2,'0')}-01`);const endAd=bsToAd(`${bsCalendarYear}-${String(bsCalendarMonth).padStart(2,'0')}-${String(days).padStart(2,'0')}`);root.innerHTML=`<div class="bs-calendar-card" role="dialog" aria-modal="true" aria-label="Bikram Sambat calendar"><div class="bs-calendar-top"><button type="button" class="bs-cal-nav" onclick="moveBsMonth(-1)" aria-label="Previous month">‹</button><div class="bs-calendar-title"><strong>${monthName} ${bsCalendarYear}</strong><span>${startAd} → ${endAd}</span></div><button type="button" class="bs-cal-nav" onclick="moveBsMonth(1)" aria-label="Next month">›</button></div><div class="bs-calendar-tools"><select aria-label="BS year" onchange="bsCalendarYear=Number(this.value);renderBsCalendar()">${Object.keys(BS_DATA).map(y=>`<option value="${y}" ${Number(y)===bsCalendarYear?'selected':''}>${y} BS</option>`).join('')}</select><select aria-label="BS month" onchange="bsCalendarMonth=Number(this.value);renderBsCalendar()">${BS_MONTHS.map((m,i)=>`<option value="${i+1}" ${i+1===bsCalendarMonth?'selected':''}>${m}</option>`).join('')}</select></div><div class="bs-calendar-grid"><div class="bs-weekday">आइत</div><div class="bs-weekday">सोम</div><div class="bs-weekday">मंगल</div><div class="bs-weekday">बुध</div><div class="bs-weekday">बिहि</div><div class="bs-weekday">शुक्र</div><div class="bs-weekday">शनि</div>${cells}</div><div class="bs-calendar-footer"><span>BS दिन मुख्य · AD नीचे</span><button type="button" class="secondary bs-close" onclick="closeBsCalendar()">Close</button></div></div>`}
+function renderBsCalendar(){const root=document.getElementById('bsCalendarModal');if(!root)return;const months=BS_DATA[bsCalendarYear];if(!months)return;const firstAd=bsToAd(`${bsCalendarYear}-${String(bsCalendarMonth).padStart(2,'0')}-01`);const days=months[bsCalendarMonth-1];const firstDay=new Date(firstAd+'T00:00:00Z').getUTCDay();const selectedAd=document.getElementById(bsCalendarTarget)?.value||'';const currentAd=document.getElementById('today')?.value||today();let cells='';for(let i=0;i<firstDay;i++)cells+='<div></div>';for(let d=1;d<=days;d++){const bsIso=`${bsCalendarYear}-${String(bsCalendarMonth).padStart(2,'0')}-${String(d).padStart(2,'0')}`;const ad=bsToAd(bsIso);const wd=new Date(ad+'T00:00:00Z').getUTCDay();const selected=ad===selectedAd?' selected':'';const isToday=ad===currentAd?' today':'';cells+=`<button type="button" class="bs-day ${wd===6?'sat':''}${selected}${isToday}" onclick="selectBsCalendarDate('${ad}')"><span class="bs-num">${d}</span><span class="ad-num">${ad.slice(8,10)} ${new Date(ad+'T00:00:00Z').toLocaleString('en',{month:'short',timeZone:'UTC'})}</span></button>`;}const monthName=BS_MONTHS[bsCalendarMonth-1];const startAd=bsToAd(`${bsCalendarYear}-${String(bsCalendarMonth).padStart(2,'0')}-01`);const endAd=bsToAd(`${bsCalendarYear}-${String(bsCalendarMonth).padStart(2,'0')}-${String(days).padStart(2,'0')}`);root.innerHTML=`<div class="bs-calendar-card" role="dialog" aria-modal="true" aria-label="Bikram Sambat calendar"><div class="bs-calendar-top"><button type="button" class="bs-cal-nav" onclick="moveBsMonth(-1)" aria-label="Previous month">‹</button><div class="bs-calendar-title"><strong>${monthName} ${bsCalendarYear}</strong><span>${startAd} → ${endAd}</span></div><button type="button" class="bs-cal-nav" onclick="moveBsMonth(1)" aria-label="Next month">›</button></div><div class="bs-calendar-tools"><select aria-label="BS year" onchange="bsCalendarYear=Number(this.value);renderBsCalendar()">${Object.keys(BS_DATA).map(y=>`<option value="${y}" ${Number(y)===bsCalendarYear?'selected':''}>${y} BS</option>`).join('')}</select><select aria-label="BS month" onchange="bsCalendarMonth=Number(this.value);renderBsCalendar()">${BS_MONTHS.map((m,i)=>`<option value="${i+1}" ${i+1===bsCalendarMonth?'selected':''}>${m}</option>`).join('')}</select></div><div class="bs-calendar-grid"><div class="bs-weekday">आइत</div><div class="bs-weekday">सोम</div><div class="bs-weekday">मंगल</div><div class="bs-weekday">बुध</div><div class="bs-weekday">बिहि</div><div class="bs-weekday">शुक्र</div><div class="bs-weekday">शनि</div>${cells}</div><div class="bs-calendar-footer"><span>BS दिन मुख्य · AD नीचे</span><button type="button" class="secondary bs-close" onclick="closeBsCalendar()">Close</button></div>${(data.journal||[]).length>150?`<div class="meta" style="padding:10px">Showing latest 150 of ${(data.journal||[]).length} journal entries.</div>`:''}</div>`}
 
 function today(){const el=document.getElementById('today');if(el&&el.value)return el.value;const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
 function esc(s=''){return String(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]))}
 function uid(){return (crypto&&crypto.randomUUID)?crypto.randomUUID():Date.now()+Math.random().toString(16).slice(2)}
 function nav(){const isMobile=/Android|iPhone|iPad|iPod/i.test(navigator.userAgent||'')||window.innerWidth<=700;const items=isMobile?navItems:navItems.filter(([id])=>id!=='device-storage');document.getElementById('nav').innerHTML=items.map(([id,t])=>`<button onclick="show('${id}')" id="nav-${id}">${t}</button>`).join('')}
-window.toggleMobileNav=function(force){const d=document.getElementById('mobileNavDrawer'),b=document.getElementById('mobileNavBackdrop');if(!d||!b)return;const open=typeof force==='boolean'?force:!d.classList.contains('open');d.classList.toggle('open',open);b.classList.toggle('open',open)};
-function show(id){document.querySelectorAll('.section').forEach(x=>x.classList.remove('active'));const target=document.getElementById(id);if(target)target.classList.add('active');document.querySelectorAll('#nav button').forEach(x=>x.classList.remove('active'));const nb=document.getElementById('nav-'+id);if(nb)nb.classList.add('active');document.querySelectorAll('#mobileBottomNav button[data-section]').forEach(x=>x.classList.toggle('active',x.dataset.section===id));const item=navItems.find(x=>x[0]===id);const title=item?item[1].replace(/^[^ ]+ /,''):id;document.getElementById('pageTitle').textContent=title;const mt=document.getElementById('mobilePageTitle');if(mt)mt.textContent=title;window.toggleMobileNav?.(false);render()}
-function dayObj(){const key=today();if(!data.daily[key]||typeof data.daily[key]!=='object')data.daily[key]={target:'',progress:'',planPoints:[],achievementPoints:[],reflectionPoints:[]};const d=data.daily[key];if(!Array.isArray(d.planPoints))d.planPoints=[];if(!Array.isArray(d.achievementPoints))d.achievementPoints=[];if(!Array.isArray(d.reflectionPoints))d.reflectionPoints=[];return d}
+window.toggleMobileNav=function(force){
+ const d=document.getElementById('mobileNavDrawer'), b=document.getElementById('mobileNavBackdrop'), btn=document.getElementById('mobileMenuButton');
+ if(!d||!b)return false;
+ const open=typeof force==='boolean'?force:!d.classList.contains('open');
+ d.classList.toggle('open',open); b.classList.toggle('open',open); document.body.classList.toggle('mobile-nav-open',open);
+ if(btn){btn.setAttribute('aria-expanded',String(open));btn.setAttribute('aria-label',open?'Close navigation':'Open navigation');btn.textContent=open?'×':'☰';}
+ return open;
+};
+(function(){
+ function initMobileNav(){
+  const btn=document.getElementById('mobileMenuButton'), back=document.getElementById('mobileNavBackdrop'), drawer=document.getElementById('mobileNavDrawer');
+  if(!btn||!back||!drawer)return;
+  // Direct onclick on the native button is the primary interaction path.
+  // No preventDefault/pointerup handler is attached here, so touch-generated
+  // clicks remain reliable in Chrome, Android WebView and tablet browsers.
+  back.addEventListener('click',function(e){if(e.target===back)window.toggleMobileNav(false);});
+  drawer.addEventListener('click',function(e){const n=e.target.closest('#nav button');if(n)window.toggleMobileNav(false);});
+  document.addEventListener('keydown',function(e){if(e.key==='Escape')window.toggleMobileNav(false);});
+  window.addEventListener('resize',function(){if(window.innerWidth>1050)window.toggleMobileNav(false);});
+ }
+ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',initMobileNav,{once:true});else initMobileNav();
+})();
+const __lazyState=new Map();
+const __lazyTokens=new Map();
+const __lazyPageSize=200;
+const __lazyMap={
+  tasks:'tasks',notes:'notes',journal:'journal',expenses:'expenses',income:'income',
+  habits:'habits',routine:'routines',goals:'goals',focus:'focusSessions',planner:'daily',
+  personal:'personal',professional:'professional',spiritual:'spiritual',economical:'economical',mental:'mental',social:'social',moral:'moral'
+};
+function lazyTodayWindow(months=6){
+  const d=new Date();d.setMonth(d.getMonth()-months);return d.toISOString().slice(0,10);
+}
+async function ensureLazySection(key,{append=false,limit=__lazyPageSize,fromDate=null,toDate=null}={}){
+  if(!NATIVE_RUNTIME||!window.omDb?.listPage)return;
+  const state=__lazyState.get(key)||{loaded:0,hasMore:true,fromDate:null,toDate:null,cursor:null};
+  if(!append && state.loaded>0 && state.fromDate===fromDate && state.toDate===toDate)return;
+  const cursor=append?state.cursor:null;
+  const rows=await window.omDb.listPage(key,{limit,offset:0,cursor,fromDate,toDate});
+  if(append) data[key]=[...(Array.isArray(data[key])?data[key]:[]),...rows];
+  else data[key]=rows;
+  // Older native releases kept attachment bytes in browser IndexedDB while
+  // SQLite stored only metadata. Hydrate the loaded page and immediately fold
+  // those bytes into the canonical SQLite payload so backups become complete.
+  if((key==='notes'||key==='journal') && typeof hydrateAttachmentsFromIDB==='function'){
+    const before=JSON.stringify(data[key]);
+    await hydrateAttachmentsFromIDB(data);
+    if(before!==JSON.stringify(data[key])) await window.omDb.persistSection(key,data[key],{force:true});
+  }
+  const last=rows.length?rows[rows.length-1]:null;
+  const next={loaded:data[key].length,hasMore:rows.length>=limit,fromDate,toDate,cursor:last?{dateKey:last.date||last.targetDate||last.createdAt||last.updatedAt||'',updatedAt:Number(last.updatedAt||last.createdAt||0),recordId:String(last.id||'')}:state.cursor};
+  __lazyState.set(key,next);
+  window.omDb.primeSection?.(key,data[key]);
+}
+async function refreshNativeFinanceSummary(fromDate='2000-01-01',toDate=today()){
+  if(!NATIVE_RUNTIME||!window.omDb?.financeSummary)return null;
+  try{window.__nativeFinanceSummary=await window.omDb.financeSummary(fromDate,toDate);return window.__nativeFinanceSummary}catch(e){console.warn('Native finance summary unavailable',e);return null}
+}
+async function ensureLazyDaily({append=false,limit=__lazyPageSize}={}){
+  if(!NATIVE_RUNTIME||!window.omDb?.listPage)return;
+  const key='daily';
+  const state=__lazyState.get(key)||{loaded:0,hasMore:true,cursor:null};
+  const cursor=append?state.cursor:null;
+  const rows=await window.omDb.listPage(key,{limit,offset:0,cursor});
+  if(!append)data.daily={};
+  for(const row of rows){
+    const date=String(row?.date||row?.id||'').slice(0,10);
+    if(date)data.daily[date]={...row};
+  }
+  const last=rows.length?rows[rows.length-1]:null;
+  __lazyState.set(key,{loaded:Object.keys(data.daily||{}).length,hasMore:rows.length>=limit,cursor:last?{dateKey:last.date||last.createdAt||last.updatedAt||'',updatedAt:Number(last.updatedAt||last.createdAt||0),recordId:String(last.id||'')}:state.cursor});
+  window.omDb.primeDaily?.(Object.values(data.daily||{}));
+}
+async function ensureSectionLoaded(id,{append=false}={}){
+  if(!NATIVE_RUNTIME||!window.omDb?.listPage)return;
+  if(id==='dashboard'){
+    const tasks=ensureLazySection('tasks',{limit:200,fromDate:today(),toDate:today()});
+    const habits=ensureLazySection('habits',{limit:200,fromDate:today(),toDate:today()});
+    const from=lazyTodayWindow(6),to=today();
+    await Promise.all([tasks,habits,ensureLazySection('income',{limit:250,fromDate:from,toDate:to}),ensureLazySection('expenses',{limit:250,fromDate:from,toDate:to})]);
+    await refreshNativeFinanceSummary?.(data?.mentor?.startDate||from);
+    return;
+  }
+  if(id==='planner'){await ensureLazyDaily({append});return;}
+  if(id==='mentor'){
+    const from=data?.mentor?.startDate||lazyTodayWindow(12),to=today();
+    await Promise.all([ensureLazySection('tasks',{limit:200,fromDate:from,toDate:to}),ensureLazySection('habits',{limit:200,fromDate:from,toDate:to}),ensureLazySection('income',{limit:250,fromDate:from,toDate:to}),ensureLazySection('expenses',{limit:250,fromDate:from,toDate:to})]);
+    await refreshNativeFinanceSummary?.(from);
+    return;
+  }
+  const key=__lazyMap[id];
+  if(!key)return;
+  if(id==='expenses'){
+    await Promise.all([ensureLazySection('income',{append,limit:__lazyPageSize}),ensureLazySection('expenses',{append,limit:__lazyPageSize})]);
+    return;
+  }
+  await ensureLazySection(key,{append,limit:__lazyPageSize});
+}
+async function loadMoreCurrentSection(){
+  const id=document.querySelector('.section.active')?.id;
+  if(!id||id==='dashboard'||!NATIVE_RUNTIME)return;
+  const key=__lazyMap[id];
+  if(id==='planner'){await ensureLazyDaily({append:true});}
+  else if(id==='expenses'){
+    await Promise.all([ensureLazySection('income',{append:true}),ensureLazySection('expenses',{append:true})]);
+  }else if(key){await ensureLazySection(key,{append:true});}
+  render();
+}
+window.loadMoreCurrentSection=loadMoreCurrentSection;
+function addLazyMoreButton(id){
+  if(!NATIVE_RUNTIME||id==='dashboard')return;
+  const key=__lazyMap[id];
+  if(!key && id!=='expenses')return;
+  const section=document.getElementById(id);if(!section)return;
+  section.querySelector('.lazy-more-wrap')?.remove();
+  const states=id==='expenses'?[__lazyState.get('income'),__lazyState.get('expenses')]:[__lazyState.get(key)];
+  if(!states.some(x=>x?.hasMore))return;
+  const wrap=document.createElement('div');wrap.className='lazy-more-wrap';wrap.innerHTML='<button type="button" class="secondary full" onclick="window.loadMoreCurrentSection()">Load more history</button>';
+  section.appendChild(wrap);
+}
+function show(id){document.querySelectorAll('.section').forEach(x=>x.classList.remove('active'));const target=document.getElementById(id);if(target)target.classList.add('active');document.querySelectorAll('#nav button').forEach(x=>x.classList.remove('active'));const nb=document.getElementById('nav-'+id);if(nb)nb.classList.add('active');document.querySelectorAll('#mobileBottomNav button[data-section]').forEach(x=>x.classList.toggle('active',x.dataset.section===id));const item=navItems.find(x=>x[0]===id);const title=item?item[1].replace(/^[^ ]+ /,''):id;document.getElementById('pageTitle').textContent=title;const mt=document.getElementById('mobilePageTitle');if(mt)mt.textContent=title;window.toggleMobileNav?.(false);const token=Date.now()+Math.random();__lazyTokens.set(id,token);render();ensureSectionLoaded(id).then(()=>{if(__lazyTokens.get(id)===token){addLazyMoreButton(id);if(NATIVE_RUNTIME)requestAnimationFrame(()=>{if(__lazyTokens.get(id)===token)render()})}}).catch(e=>console.warn('Lazy section load failed',id,e))}
+function dayObj(){
+  if(!data||typeof data!=='object')return {target:'',progress:'',planPoints:[],achievementPoints:[],reflectionPoints:[]};
+  if(!data.daily||typeof data.daily!=='object'||Array.isArray(data.daily))data.daily={};
+  const key=today();
+  if(!data.daily[key]||typeof data.daily[key]!=='object'||Array.isArray(data.daily[key]))data.daily[key]={target:'',progress:'',planPoints:[],achievementPoints:[],reflectionPoints:[]};
+  const d=data.daily[key];
+  if(!Array.isArray(d.planPoints))d.planPoints=[];
+  if(!Array.isArray(d.achievementPoints))d.achievementPoints=[];
+  if(!Array.isArray(d.reflectionPoints))d.reflectionPoints=[];
+  return d;
+}
 function addPoint(kind){let x=prompt('Point लिखें:');if(x&&x.trim()){dayObj()[kind].push({id:uid(),text:x.trim(),done:false});save();render()}}
 function togglePoint(kind,id){let p=dayObj()[kind].find(x=>x.id===id);if(p)p.done=!p.done;save();render()}
 function delPoint(kind,id){if(!confirm('इस point को delete करें?'))return;let a=dayObj()[kind]||[];dayObj()[kind]=a.filter(x=>x.id!==id);save();render()} function pointHtml(kind){let a=dayObj()[kind]||[];return a.length?a.map(x=>`<div class="point ${x.done?'point-done':''}"><input type="checkbox" ${x.done?'checked':''} onchange="togglePoint('${kind}','${x.id}')"><span class="point-text">${esc(x.text)}</span><div class="point-actions"><button class="secondary point-action-done" type="button" onclick="togglePoint('${kind}','${x.id}')">${x.done?'Undo':'Done'}</button><button class="danger point-action-delete" type="button" onclick="delPoint('${kind}','${x.id}')">Delete</button></div></div>`).join(''):'<div class="muted">अभी कोई point नहीं है।</div>'}
@@ -411,7 +675,7 @@ function renderTasks(){
  renderTaskList();
 }
 function tags(s){return (s||'').split(',').map(x=>x.trim()).filter(Boolean).map(x=>`<span class="tag">#${esc(x)}</span>`).join('')}
-function renderTaskList(){let f=document.getElementById('filter')?.value||'All',a=data.tasks.filter(x=>f==='All'||(f==='Completed'?x.done:x.category===f));document.getElementById('taskList').innerHTML=a.length?`<div class="list">${a.map(x=>`<div class="item ${x.done?'done':''}"><div class="between"><div><span class="title">${esc(x.title)}</span> ${tags(x.tags)}<div class="meta">${esc(x.category)} · ${esc(x.priority)} · ${esc(x.date||'')} ${esc(x.time||'')}</div></div><div class="row"><button class="secondary" onclick="toggleTask('${x.id}')">${x.done?'Undo':'Done'}</button><button class="danger" onclick="delTask('${x.id}')">Delete</button></div></div></div>`).join('')}</div>`:'<div class="empty">कोई task नहीं।</div>'}
+function renderTaskList(){let f=document.getElementById('filter')?.value||'All',all=data.tasks.filter(x=>f==='All'||(f==='Completed'?x.done:x.category===f)),a=all.slice().sort((x,y)=>String(y.date||'').localeCompare(String(x.date||''))).slice(0,200);document.getElementById('taskList').innerHTML=a.length?`<div class="list">${a.map(x=>`<div class="item ${x.done?'done':''}"><div class="between"><div><span class="title">${esc(x.title)}</span> ${tags(x.tags)}<div class="meta">${esc(x.category)} · ${esc(x.priority)} · ${esc(x.date||'')} ${esc(x.time||'')}</div></div><div class="row"><button class="secondary" onclick="toggleTask('${x.id}')">${x.done?'Undo':'Done'}</button><button class="danger" onclick="delTask('${x.id}')">Delete</button></div></div></div>`).join('')}</div>${all.length>200?`<div class="meta" style="padding:10px">Showing latest 200 of ${all.length}. Use the filter to narrow the list.</div>`:''}`:'<div class="empty">कोई task नहीं।</div>'}
 function addTask(){let title=document.getElementById('tt').value.trim();if(!title)return;data.tasks.push({id:uid(),title,category:document.getElementById('tc').value,date:document.getElementById('td').value, time:document.getElementById('tm').value,priority:document.getElementById('tp').value,tags:document.getElementById('ttag').value,done:false});clearDrafts(['tt','tc','td','tm','tp','ttag']);save();renderTasks()}
 function toggleTask(id){let x=data.tasks.find(x=>x.id===id);if(x)x.done=!x.done;save();renderTasks()}function delTask(id){data.tasks=data.tasks.filter(x=>x.id!==id);save();renderTasks()}
 
@@ -465,7 +729,7 @@ const financeNotebookCategories=['Personal','Work','Study','Ideas','Projects','M
 function syncNotebookManual(){const select=document.getElementById('ncatSelect'),input=document.getElementById('ncat');if(!select||!input)return;const manual=select.value==='__manual__';input.disabled=!manual;input.required=manual;if(!manual)input.value='';if(manual)input.focus()}
 function notebookLabel(){const select=document.getElementById('ncatSelect'),input=document.getElementById('ncat');if(input&&input.value.trim())return input.value.trim();if(select&&select.value&&select.value!=='__manual__')return select.value;return ''}
 async function addNote(){let t=document.getElementById('nt').value.trim(),b=richText(),bh=richHtml(),pts=document.getElementById('npoints').value.trim(),cat=notebookLabel();if(!t&&!b&&!pts&&!noteImages.length)return toast('Note में content या image जोड़ें');const note={id:uid(),title:t||'Untitled',body:b,html:bh,points:pts,category:cat||'General',color:document.getElementById('ncustom').value||noteColor,tags:document.getElementById('ntag').value,date:today(),images:noteImages.slice()};data.notes.unshift(note);clearDrafts(['nt','ntag','ncat','ncatSelect','nb','npoints']);const stored=await persistAttachmentItemToIDB('note',note);if(note.images.length&&!stored)return toast('⚠️ Image storage failed. Note save रोक दिया गया — retry करें.');save();renderNotes();toast('Note saved')}
-function renderNoteList(){let q=(document.getElementById('nf')?.value||'').toLowerCase(),a=data.notes.filter(x=>`${x.title||''} ${x.body||''} ${x.points||''} ${x.tags||''} ${x.category||''}`.toLowerCase().includes(q));document.getElementById('noteList').innerHTML=a.length?`<div class="grid g3">${a.map(x=>{let pts=(x.points||'').split(/\r?\n/).map(s=>s.trim()).filter(Boolean);let imgs=Array.isArray(x.images)?x.images:[];return `<article class="note-card" style="background:${/^#[0-9a-f]{6}$/i.test(x.color||'')?x.color:'#fff8c5'}"><div class="between"><div><div class="title">${esc(x.title)}</div><div class="meta">${esc(x.date||'')} · ${esc(x.category||'General')} ${tags(x.tags)}</div></div><button class="btn danger" onclick="delNote('${x.id}')">Delete</button></div>${x.html?`<div style="line-height:1.6">${x.html}</div>`:(x.body?`<p style="white-space:pre-wrap;line-height:1.5">${esc(x.body)}</p>`:'')}${pts.length?`<ul class="points">${pts.map(p=>`<li>• ${esc(p.replace(/^[-•*]\s*/,''))}</li>`).join('')}</ul>`:''}${imgs.map(im=>`<img loading="lazy" decoding="async" src="${esc(im)}" alt="note image">`).join('')}</article>`}).join('')}</div>`:'<div class="meta" style="padding:22px;text-align:center">कोई note नहीं।</div>'}
+function renderNoteList(){let q=(document.getElementById('nf')?.value||'').toLowerCase(),all=data.notes.filter(x=>`${x.title||''} ${x.body||''} ${x.points||''} ${x.tags||''} ${x.category||''}`.toLowerCase().includes(q)),a=all.slice(0,150);document.getElementById('noteList').innerHTML=a.length?`<div class="grid g3">${a.map(x=>{let pts=(x.points||'').split(/\r?\n/).map(s=>s.trim()).filter(Boolean);let imgs=Array.isArray(x.images)?x.images:[];return `<article class="note-card" style="background:${/^#[0-9a-f]{6}$/i.test(x.color||'')?x.color:'#fff8c5'}"><div class="between"><div><div class="title">${esc(x.title)}</div><div class="meta">${esc(x.date||'')} · ${esc(x.category||'General')} ${tags(x.tags)}</div></div><button class="btn danger" onclick="delNote('${x.id}')">Delete</button></div>${x.html?`<div style="line-height:1.6">${x.html}</div>`:(x.body?`<p style="white-space:pre-wrap;line-height:1.5">${esc(x.body)}</p>`:'')}${pts.length?`<ul class="points">${pts.map(p=>`<li>• ${esc(p.replace(/^[-•*]\s*/,''))}</li>`).join('')}</ul>`:''}${imgs.map(im=>`<img loading="lazy" decoding="async" src="${esc(im)}" alt="note image">`).join('')}</article>`}).join('')}</div>${all.length>150?`<div class="meta" style="padding:10px">Showing 150 of ${all.length}. Search to narrow the list.</div>`:''}`:'<div class="meta" style="padding:22px;text-align:center">कोई note नहीं।</div>'}
 function delNote(id){data.notes=data.notes.filter(x=>x.id!==id);deleteAttachmentSet('note',id);save();renderNotes()}
 const defaultHabits=[['Meditation','🧘'],['Yoga','🧘‍♂️'],['Water','💧'],['Healthy Food','🥗'],['Sleep','😴'],['Exercise','🏃']];
 function renderHabits(){let custom=[...new Set(data.habits.filter(h=>h.custom).map(h=>h.name))];document.getElementById('habits').innerHTML=`<div class="grid g3">${defaultHabits.map(([n,i])=>habitCard(n,i,false)).join('')}${custom.map(n=>habitCard(n,'⭐',true)).join('')}</div><div class="card" style="margin-top:16px"><h2>➕ Custom Habit + Time</h2><div class="form"><input id="hn" placeholder="Reading, Prayer, Study..."><input id="ht" type="time"><button class="btn primary full" onclick="addHabit()">Add Habit with Time</button></div></div>`}
@@ -500,7 +764,7 @@ function deleteCustomHabit(n){n=decodeURIComponent(n);data.habits=data.habits.fi
 
 function periodOk(date,p){let x=new Date(date+'T00:00:00'),n=new Date(),s=new Date(n.getFullYear(),n.getMonth(),n.getDate());if(p==='daily')return date===today();if(p==='weekly'){let z=new Date(s);z.setDate(z.getDate()-6);return x>=z&&x<=s}if(p==='monthly')return x.getMonth()===n.getMonth()&&x.getFullYear()===n.getFullYear();return x.getFullYear()===n.getFullYear()}
 function periodButtons(){return ['daily','weekly','monthly','yearly'].map(p=>`<button class="${data.financePeriod===p?'active':''}" onclick="data.financePeriod='${p}';save();renderExpenses()">${p[0].toUpperCase()+p.slice(1)}</button>`).join('')}
-function renderExpenses(){let p=data.financePeriod||'monthly',inc=data.income.filter(x=>periodOk(x.date,p)),out=data.expenses.filter(x=>periodOk(x.date,p)),ia=inc.reduce((s,x)=>s+Number(x.amount),0),ea=out.reduce((s,x)=>s+Number(x.amount),0);document.getElementById('expenses').innerHTML=`<div class="card"><div class="finance-head"><h2>💰 Expenses & Income</h2><div class="periods">${periodButtons()}</div></div><div class="grid" style="margin-top:15px"><div class="card"><div class="label">Income — ${p}</div><div class="money income">₹${ia.toFixed(2)}</div></div><div class="card"><div class="label">Expense — ${p}</div><div class="money expense">₹${ea.toFixed(2)}</div></div><div class="card"><div class="label">Balance — ${p}</div><div class="money">₹${(ia-ea).toFixed(2)}</div></div><div class="card"><div class="label">Transactions</div><div class="metric">${inc.length+out.length}</div></div></div></div><div class="two" style="margin-top:16px"><div class="card"><h2>➕ Add Income</h2><div class="formgrid"><select id="isSelect" onchange="syncFinanceManual('income')"><option value="">Select income source</option>${financeIncomeSources.map(x=>`<option value="${esc(x)}">${esc(x)}</option>`).join('')}<option value="__manual__">✍️ Manual entry</option></select><input id="is" placeholder="Manual income source (optional)" disabled><input id="ia" inputmode="decimal" placeholder="Amount (e.g. 1500+500)" oninput="previewFinanceAmount('ia','iap')"><div id="iap" class="meta"></div>${dateFieldMarkup('id',today(),'Income date')}<input id="inote" placeholder="Note"><button class="primary" onclick="addIncome()">Save Income</button></div></div><div class="card"><h2>➕ Add Expense</h2><div class="formgrid"><select id="esSelect" onchange="syncFinanceManual('expense')"><option value="">Select expense category</option>${financeExpenseCategories.map(x=>`<option value="${esc(x)}">${esc(x)}</option>`).join('')}<option value="__manual__">✍️ Manual entry</option></select><input id="es" placeholder="Manual expense category (optional)" disabled><input id="ea" inputmode="decimal" placeholder="Amount (e.g. 1200+300)" oninput="previewFinanceAmount('ea','eap')"><div id="eap" class="meta"></div>${dateFieldMarkup('ed',today(),'Expense date')}<input id="en" placeholder="Note"><button class="primary" onclick="addExpense()">Save Expense</button></div></div></div><div class="card" style="margin-top:16px"><h2>🧮 Built-in Calculator</h2><div class="formgrid"><input id="finCalc" inputmode="decimal" placeholder="Example: 1500 + 250 - 100 × 2" oninput="calculateFinanceExpression()"><div id="finCalcResult" class="money">₹0.00</div><div class="meta">Amount fields also support +, -, ×, ÷ and brackets. Example: 1000+500-200.</div></div></div><div class="card" style="margin-top:16px"><h2>📋 ${p[0].toUpperCase()+p.slice(1)} Transactions</h2><div id="finList"></div></div>`;let all=[...inc.map(x=>({...x,type:'income'})),...out.map(x=>({...x,type:'expense'}))].sort((a,b)=>b.date.localeCompare(a.date));document.getElementById('finList').innerHTML=all.length?`<div class="list">${all.map(x=>`<div class="item"><div class="between"><div><b class="${x.type==='income'?'income':'expense'}">${x.type==='income'?'+':'-'} ₹${Number(x.amount).toFixed(2)}</b> · ${esc(x.source)}<div class="meta">${x.date} · ${esc(x.note||'')}</div></div><button class="danger" onclick="delFinance('${x.type}','${x.id}')">Delete</button></div></div>`).join('')}</div>`:'<div class="empty">इस period में कोई transaction नहीं।</div>'}
+function renderExpenses(){let p=data.financePeriod||'monthly',inc=data.income.filter(x=>periodOk(x.date,p)),out=data.expenses.filter(x=>periodOk(x.date,p)),ia=inc.reduce((s,x)=>s+Number(x.amount),0),ea=out.reduce((s,x)=>s+Number(x.amount),0);document.getElementById('expenses').innerHTML=`<div class="card"><div class="finance-head"><h2>💰 Expenses & Income</h2><div class="periods">${periodButtons()}</div></div><div class="grid" style="margin-top:15px"><div class="card"><div class="label">Income — ${p}</div><div class="money income">₹${ia.toFixed(2)}</div></div><div class="card"><div class="label">Expense — ${p}</div><div class="money expense">₹${ea.toFixed(2)}</div></div><div class="card"><div class="label">Balance — ${p}</div><div class="money">₹${(ia-ea).toFixed(2)}</div></div><div class="card"><div class="label">Transactions</div><div class="metric">${inc.length+out.length}</div></div></div></div><div class="two" style="margin-top:16px"><div class="card"><h2>➕ Add Income</h2><div class="formgrid"><select id="isSelect" onchange="syncFinanceManual('income')"><option value="">Select income source</option>${financeIncomeSources.map(x=>`<option value="${esc(x)}">${esc(x)}</option>`).join('')}<option value="__manual__">✍️ Manual entry</option></select><input id="is" placeholder="Manual income source (optional)" disabled><input id="ia" inputmode="decimal" placeholder="Amount (e.g. 1500+500)" oninput="previewFinanceAmount('ia','iap')"><div id="iap" class="meta"></div>${dateFieldMarkup('id',today(),'Income date')}<input id="inote" placeholder="Note"><button class="primary" onclick="addIncome()">Save Income</button></div></div><div class="card"><h2>➕ Add Expense</h2><div class="formgrid"><select id="esSelect" onchange="syncFinanceManual('expense')"><option value="">Select expense category</option>${financeExpenseCategories.map(x=>`<option value="${esc(x)}">${esc(x)}</option>`).join('')}<option value="__manual__">✍️ Manual entry</option></select><input id="es" placeholder="Manual expense category (optional)" disabled><input id="ea" inputmode="decimal" placeholder="Amount (e.g. 1200+300)" oninput="previewFinanceAmount('ea','eap')"><div id="eap" class="meta"></div>${dateFieldMarkup('ed',today(),'Expense date')}<input id="en" placeholder="Note"><button class="primary" onclick="addExpense()">Save Expense</button></div></div></div><div class="card" style="margin-top:16px"><h2>🧮 Built-in Calculator</h2><div class="formgrid"><input id="finCalc" inputmode="decimal" placeholder="Example: 1500 + 250 - 100 × 2" oninput="calculateFinanceExpression()"><div id="finCalcResult" class="money">₹0.00</div><div class="meta">Amount fields also support +, -, ×, ÷ and brackets. Example: 1000+500-200.</div></div></div><div class="card" style="margin-top:16px"><h2>📋 ${p[0].toUpperCase()+p.slice(1)} Transactions</h2><div id="finList"></div></div>`;let all=[...inc.map(x=>({...x,type:'income'})),...out.map(x=>({...x,type:'expense'}))].sort((a,b)=>b.date.localeCompare(a.date)),visible=all.slice(0,250);document.getElementById('finList').innerHTML=visible.length?`<div class="list">${visible.map(x=>`<div class="item"><div class="between"><div><b class="${x.type==='income'?'income':'expense'}">${x.type==='income'?'+':'-'} ₹${Number(x.amount).toFixed(2)}</b> · ${esc(x.source)}<div class="meta">${x.date} · ${esc(x.note||'')}</div></div><button class="danger" onclick="delFinance('${x.type}','${x.id}')">Delete</button></div></div>`).join('')}</div>${all.length>250?`<div class="meta" style="padding:10px">Showing latest 250 of ${all.length} transactions. Narrow the period for older entries.</div>`:''}`:'<div class="empty">इस period में कोई transaction नहीं।</div>'}
 const financeIncomeSources=['Salary','Freelance','Business','Investment','Bonus','Interest','Rental Income','Other Income'];
 const financeExpenseCategories=['Food','Groceries','Rent','Utilities','Transport','Fuel','Shopping','Health','Education','Entertainment','Bills','Travel','EMI / Loan','Subscriptions','Other Expense'];
 function syncFinanceManual(type){const select=document.getElementById(type==='income'?'isSelect':'esSelect'),input=document.getElementById(type==='income'?'is':'es');if(!select||!input)return;const manual=select.value==='__manual__';input.disabled=!manual;input.required=manual;if(!manual)input.value='';if(manual)input.focus()}
@@ -513,7 +777,28 @@ function addExpense(){let s=financeLabel('expense'),raw=document.getElementById(
 function delFinance(type,id){if(type==='income')data.income=data.income.filter(x=>x.id!==id);else data.expenses=data.expenses.filter(x=>x.id!==id);save();renderExpenses()}
 
 function toast(m){let t=document.getElementById('toast');if(!t)return;t.textContent=m;t.style.display='block';clearTimeout(window.__toastTimer);window.__toastTimer=setTimeout(()=>t.style.display='none',1800)}
-function applyTheme(){let mode=(data.settings&&data.settings.mode==='dark')?'dark':'light';let t=mode==='dark'?['#a78bfa','#c4b5fd']:['#6750e8','#8b5cf6'];document.documentElement.style.setProperty('--accent',t[0]);document.documentElement.style.setProperty('--accent2',t[1]);document.documentElement.dataset.lifeosMode=mode;document.documentElement.style.colorScheme=mode;const meta=document.querySelector('meta[name="theme-color"]');if(meta)meta.setAttribute('content',mode==='dark'?'#0b0e16':'#f7f8fa');if(mode==='dark'){document.documentElement.style.setProperty('--bg','#0b0e16');document.documentElement.style.setProperty('--card','#181c25');document.documentElement.style.setProperty('--text','#f3f4f6');document.documentElement.style.setProperty('--muted','#a8afbd');document.documentElement.style.setProperty('--line','#343a49')}else{document.documentElement.style.setProperty('--bg','#f7f8fa');document.documentElement.style.setProperty('--card','#fff');document.documentElement.style.setProperty('--text','#202124');document.documentElement.style.setProperty('--muted','#70757a');document.documentElement.style.setProperty('--line','#e0e3e7')}updateAppearanceButton()}
+function applyTheme(){
+  const mode=(data.settings&&data.settings.mode==='dark')?'dark':'light';
+  const dark=mode==='dark';
+  const t=dark?['#a78bfa','#c4b5fd']:['#6750e8','#8b5cf6'];
+  const vars=dark?{
+    '--bg':'#0b0e16','--surface':'#151a24','--surface2':'#1b2230','--text':'#f3f4f6','--muted':'#a8afbd','--line':'#343a49',
+    '--sidebar':'#070a10','--shadow':'0 10px 28px rgba(0,0,0,.28)','--green':'#4ade80','--red':'#f87171',
+    '--ultra-ink':'#f3f4f6','--ultra-muted':'#a8afbd','--ultra-line':'#303747','--ultra-soft':'#111722'
+  }:{
+    '--bg':'#f7f8fa','--surface':'#ffffff','--surface2':'#f8f9fb','--text':'#202124','--muted':'#70757a','--line':'#e0e3e7',
+    '--sidebar':'#121822','--shadow':'0 3px 14px rgba(22,31,45,.06)','--green':'#16834b','--red':'#c23a3a',
+    '--ultra-ink':'#111827','--ultra-muted':'#6b7280','--ultra-line':'#e7eaf0','--ultra-soft':'#f7f8fb'
+  };
+  document.documentElement.style.setProperty('--accent',t[0]);
+  document.documentElement.style.setProperty('--accent2',t[1]);
+  Object.entries(vars).forEach(([k,v])=>document.documentElement.style.setProperty(k,v));
+  document.documentElement.dataset.lifeosMode=mode;
+  document.documentElement.style.colorScheme=mode;
+  const meta=document.querySelector('meta[name="theme-color"]');
+  if(meta)meta.setAttribute('content',dark?'#0b0e16':'#f7f8fa');
+  updateAppearanceButton();
+}
 function toggleAppearance(){data.settings.mode=(data.settings.mode==='dark'?'light':'dark');save();applyTheme();render();toast(data.settings.mode==='dark'?'🌙 Dark mode enabled':'☀️ Light mode enabled')}
 function updateAppearanceButton(){const dark=document.documentElement.dataset.lifeosMode==='dark';['themeToggle','sidebarThemeToggle'].forEach(id=>{const b=document.getElementById(id);if(!b)return;b.textContent=dark?'☀️':'🌙';b.title=dark?'Switch to light mode':'Switch to dark mode';b.setAttribute('aria-label',b.title);b.setAttribute('aria-pressed',dark?'true':'false')});document.querySelectorAll('#mobileBottomNav .bottom-theme').forEach(b=>{b.title=dark?'Switch to light mode':'Switch to dark mode';b.setAttribute('aria-label',b.title);b.setAttribute('aria-pressed',dark?'true':'false')})}
 applyTheme();
@@ -531,9 +816,8 @@ const __defaultHabitNames=['Meditation','Yoga','Water','Healthy Food','Sleep','E
 data.habits.forEach(h=>{if(h.custom===undefined)h.custom=!__defaultHabitNames.includes(h.name)});
 // Startup optimization: don't synchronously stringify/write the whole app before first paint.
 // Device storage reconciliation below handles persistence; local fallback is deferred.
-scheduleLocalPersist(1800);
+if(!NATIVE_RUNTIME)scheduleLocalPersist(1800);
 bootDeviceStorage();
-setTimeout(()=>{if(window.omDb)window.omDb.bootstrapFromLegacy(data).catch(()=>{});},1200);
 // Attachments can be large (base64 images/files). Move this work off the critical startup path.
 const __persistAttachmentsIdle=()=>persistAttachmentsToIDB(data).catch(()=>{});
 const __hydrateAttachmentsIdle=()=>hydrateAttachmentsFromIDB(data).then(()=>{
@@ -541,12 +825,14 @@ const __hydrateAttachmentsIdle=()=>hydrateAttachmentsFromIDB(data).then(()=>{
   if(active==='notes')renderNoteList();
   if(active==='journal')renderJournal();
 }).catch(()=>{});
-if('requestIdleCallback' in window){
-  requestIdleCallback(__persistAttachmentsIdle,{timeout:3000});
-  requestIdleCallback(__hydrateAttachmentsIdle,{timeout:5000});
-}else{
-  setTimeout(__persistAttachmentsIdle,1200);
-  setTimeout(__hydrateAttachmentsIdle,1800);
+if(!NATIVE_RUNTIME){
+  if('requestIdleCallback' in window){
+    requestIdleCallback(__persistAttachmentsIdle,{timeout:3000});
+    requestIdleCallback(__hydrateAttachmentsIdle,{timeout:5000});
+  }else{
+    setTimeout(__persistAttachmentsIdle,1200);
+    setTimeout(__hydrateAttachmentsIdle,1800);
+  }
 }
 // Attachment metadata stays in the main record; binary content is durable in IndexedDB and hydrated lazily.
 
@@ -584,7 +870,7 @@ async function addJournal(){
   toast('Journal saved');
 }
 async function deleteJournal(id){if(!confirm('इस journal entry को delete करें?'))return;data.journal=(data.journal||[]).filter(x=>x.id!==id);save();try{await deleteAttachmentSet('journal',id)}catch(e){console.warn(e)}renderJournal();toast('Journal deleted ✓')}
-function renderJournal(){journalThemeColor='#fff8c5';document.getElementById('journal').innerHTML=`<div class="two"><div class="card" id="journalEditor"><h2>📔 Detailed Daily Journal</h2><p class="muted">आज की पूरी घटना, विचार, सीख और memories यहाँ विस्तार से लिखें.</p><div class="form"><input id="jtitle" placeholder="Journal title">${dateFieldMarkup('jdate',today(),'Journal date')}<div class="full color-line"><span class="label">Note Theme</span><input id="jcustom" class="color-input" type="color" value="#fff8c5" onchange="setJournalThemeColor(this.value)"><span class="label">Any color</span></div><div class="full"><div class="theme-grid"><button class="swatch" style="background:#fff8c5" onclick="setJournalThemeColor('#fff8c5')"></button><button class="swatch" style="background:#f0edff" onclick="setJournalThemeColor('#f0edff')"></button><button class="swatch" style="background:#e9f8ef" onclick="setJournalThemeColor('#e9f8ef')"></button><button class="swatch" style="background:#eaf3ff" onclick="setJournalThemeColor('#eaf3ff')"></button><button class="swatch" style="background:#ffeef0" onclick="setJournalThemeColor('#ffeef0')"></button><button class="swatch" style="background:#fff" onclick="setJournalThemeColor('#fff')"></button></div></div><div class="full"><div class="rich-toolbar"><button type="button" onclick="journalCmd('bold')"><b>B</b></button><button type="button" onclick="journalCmd('italic')"><i>I</i></button><button type="button" onclick="journalCmd('underline')"><u>U</u></button><button type="button" onclick="journalCmd('insertUnorderedList')">• List</button><select onchange="journalFontSize(this.value);this.selectedIndex=0"><option>Size</option><option value="2">Small</option><option value="3">Normal</option><option value="5">Large</option><option value="7">Huge</option></select><input type="color" value="#202124" onchange="journalColor(this.value)" title="Font color"></div><div id="jbody" class="rich-editor" contenteditable="true"></div></div><div class="full"><b>📎 Photo / File</b><input type="file" id="jfiles" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.csv" onchange="previewJournalFiles(this)"><div id="jfilesPreview" class="attachment-list"></div></div><button class="primary full" onclick="addJournal()">Save Journal</button></div></div><div class="card"><h2>📚 Journal Entries</h2><p class="muted">Daily memories, notes और attachments.</p></div></div><div class="card" style="margin-top:16px"><div class="grid g3">${(data.journal||[]).map(x=>`<article class="note-card" style="background:${/^#[0-9a-f]{6}$/i.test(x.color||'')?x.color:'#fff8c5'}"><div class="between"><div><b>${esc(x.title)}</b><div class="meta">${esc(x.date||'')}</div></div><button class="danger" onclick="deleteJournal('${x.id}')">Delete</button></div><div style="line-height:1.6;margin-top:10px">${x.html||esc(x.text||'')}</div>${(x.files||[]).map(f=>f.type?.startsWith('image/')?`<img loading="lazy" decoding="async" src="${esc(f.data)}" alt="${esc(f.name)}">`:`<div class="attachment-chip">📎 ${esc(f.name)}</div>`).join('')}</article>`).join('')||'<div class="muted">अभी कोई journal entry नहीं।</div>'}</div></div>`}
+function renderJournal(){journalThemeColor='#fff8c5';document.getElementById('journal').innerHTML=`<div class="two"><div class="card" id="journalEditor"><h2>📔 Detailed Daily Journal</h2><p class="muted">आज की पूरी घटना, विचार, सीख और memories यहाँ विस्तार से लिखें.</p><div class="form"><input id="jtitle" placeholder="Journal title">${dateFieldMarkup('jdate',today(),'Journal date')}<div class="full color-line"><span class="label">Note Theme</span><input id="jcustom" class="color-input" type="color" value="#fff8c5" onchange="setJournalThemeColor(this.value)"><span class="label">Any color</span></div><div class="full"><div class="theme-grid"><button class="swatch" style="background:#fff8c5" onclick="setJournalThemeColor('#fff8c5')"></button><button class="swatch" style="background:#f0edff" onclick="setJournalThemeColor('#f0edff')"></button><button class="swatch" style="background:#e9f8ef" onclick="setJournalThemeColor('#e9f8ef')"></button><button class="swatch" style="background:#eaf3ff" onclick="setJournalThemeColor('#eaf3ff')"></button><button class="swatch" style="background:#ffeef0" onclick="setJournalThemeColor('#ffeef0')"></button><button class="swatch" style="background:#fff" onclick="setJournalThemeColor('#fff')"></button></div></div><div class="full"><div class="rich-toolbar"><button type="button" onclick="journalCmd('bold')"><b>B</b></button><button type="button" onclick="journalCmd('italic')"><i>I</i></button><button type="button" onclick="journalCmd('underline')"><u>U</u></button><button type="button" onclick="journalCmd('insertUnorderedList')">• List</button><select onchange="journalFontSize(this.value);this.selectedIndex=0"><option>Size</option><option value="2">Small</option><option value="3">Normal</option><option value="5">Large</option><option value="7">Huge</option></select><input type="color" value="#202124" onchange="journalColor(this.value)" title="Font color"></div><div id="jbody" class="rich-editor" contenteditable="true"></div></div><div class="full"><b>📎 Photo / File</b><input type="file" id="jfiles" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.csv" onchange="previewJournalFiles(this)"><div id="jfilesPreview" class="attachment-list"></div></div><button class="primary full" onclick="addJournal()">Save Journal</button></div></div><div class="card"><h2>📚 Journal Entries</h2><p class="muted">Daily memories, notes और attachments.</p></div></div><div class="card" style="margin-top:16px"><div class="grid g3">${(data.journal||[]).slice(0,150).map(x=>`<article class="note-card" style="background:${/^#[0-9a-f]{6}$/i.test(x.color||'')?x.color:'#fff8c5'}"><div class="between"><div><b>${esc(x.title)}</b><div class="meta">${esc(x.date||'')}</div></div><button class="danger" onclick="deleteJournal('${x.id}')">Delete</button></div><div style="line-height:1.6;margin-top:10px">${x.html||esc(x.text||'')}</div>${(x.files||[]).map(f=>f.type?.startsWith('image/')?`<img loading="lazy" decoding="async" src="${esc(f.data)}" alt="${esc(f.name)}">`:`<div class="attachment-chip">📎 ${esc(f.name)}</div>`).join('')}</article>`).join('')||'<div class="muted">अभी कोई journal entry नहीं।</div>'}</div></div>`}
 
 function renderGoals(){
  const goals=data.goals||[];const done=goals.filter(g=>Number(g.progress)>=100).length;
@@ -707,24 +993,50 @@ function resetMentorRules(){
 }
 function mentorFinance(){
  const m=data.mentor,start=m.startDate||today(),cap=Math.max(0,Number(m.startingCapital||0));
- const income=(data.income||[]).filter(x=>x.date>=start).reduce((a,x)=>a+Number(x.amount||0),0);
- const expense=(data.expenses||[]).filter(x=>x.date>=start).reduce((a,x)=>a+Number(x.amount||0),0);
+ const cacheKey=String(start)+'|'+String(data.__updatedAt||0);
+ const cached=window.__mentorFinanceCache;
+ if(cached?.key===cacheKey)return cached.value;
+ const nativeSummary=(NATIVE_RUNTIME&&window.__nativeFinanceSummary&&window.__nativeFinanceSummary.fromDate===start)?window.__nativeFinanceSummary:null;
+ const income=nativeSummary?Number(nativeSummary.income||0):(data.income||[]).reduce((a,x)=>a+(String(x.date||'')>=start?Number(x.amount||0):0),0);
+ const expense=nativeSummary?Number(nativeSummary.expense||0):(data.expenses||[]).reduce((a,x)=>a+(String(x.date||'')>=start?Number(x.amount||0):0),0);
  const autoBalance=cap+income-expense;
  const balance=m.balanceMode==='manual'?Math.max(0,Number(m.manualBalance||0)):autoBalance;
  const plannedAllocation=Math.max(0,Number(m.survivalReserve||0))+Math.max(0,Number(m.emergencyReserve||0))+Math.max(0,Number(m.careerFund||0))+Math.max(0,Number(m.opportunityFund||0));
  const unallocated=cap-plannedAllocation;
  const dailyBurn=Math.max(0,Number(m.dailyBurn||0));
  const runway=dailyBurn?balance/dailyBurn:0;
- return {income,expense,balance,runway,cap,plannedAllocation,unallocated,dailyBurn,monthlyBurn:Math.max(0,Number(m.monthlyBurn||0))};
+ const value={income,expense,balance,runway,cap,plannedAllocation,unallocated,dailyBurn,monthlyBurn:Math.max(0,Number(m.monthlyBurn||0))};
+ window.__mentorFinanceCache={key:cacheKey,value};
+ return value;
+}
+function mentorDaySnapshot(date){
+ const cacheKey=String(date)+'|'+String(data.__updatedAt||0);
+ const cached=window.__mentorDayCache;
+ if(cached?.key===cacheKey)return cached.value;
+ const out={tasksDone:0,tasksTotal:0,income:0,expense:0};
+ for(const x of(data.tasks||[])){if(String(x.date||'')===date){out.tasksTotal++;if(x.done)out.tasksDone++;}}
+ for(const x of(data.income||[])){if(String(x.date||'')===date)out.income+=Number(x.amount||0);}
+ for(const x of(data.expenses||[])){if(String(x.date||'')===date)out.expense+=Number(x.amount||0);}
+ window.__mentorDayCache={key:cacheKey,value:out};
+ return out;
 }
 function mentorStatus(fin,k){if(fin.runway<30)return ['bad','RED — income action required'];if(fin.runway<60||k.outreach<5)return ['warn','YELLOW — pipeline बढ़ाओ'];return ['good','GREEN — continue & protect runway'];}
+function resizeMentorRuleInput(el){
+  if(!el)return;
+  el.style.height='auto';
+  const h=Math.min(160,Math.max(56,Number(el.scrollHeight||56)+2));
+  el.style.height=h+'px';
+}
+function resizeMentorRules(root=document){root.querySelectorAll?.('.mentor-rule-input').forEach(resizeMentorRuleInput)}
+function mentorRuleAutosizeHandler(e){if(e.target?.matches?.('.mentor-rule-input'))resizeMentorRuleInput(e.target)}
+if(!window.__mentorRuleAutosizeBound){document.addEventListener('input',mentorRuleAutosizeHandler,{passive:true});window.__mentorRuleAutosizeBound=true}
 function renderMentor(){
  const el=document.getElementById('mentor');if(!el)return;
- const date=data.mentorSelectedDate||today(),k=mentorToday(),m=data.mentor,f=mentorFinance(),q=mentorQuoteForDate(date),st=mentorStatus(f,k),missions=Array.isArray(m.missions)?m.missions:[];
- const td=data.tasks.filter(x=>x.date===date), inc=data.income.filter(x=>x.date===date).reduce((a,b)=>a+Number(b.amount||0),0), ex=data.expenses.filter(x=>x.date===date).reduce((a,b)=>a+Number(b.amount||0),0);
+ const date=data.mentorSelectedDate||today(),k=mentorToday(),m=data.mentor,f=mentorFinance(),q=mentorQuoteForDate(date),st=mentorStatus(f,k),missions=Array.isArray(m.missions)?m.missions:[],day=mentorDaySnapshot(date);
+ const tdTotal=day.tasksTotal, tdDone=day.tasksDone, inc=day.income, ex=day.expense;
  el.innerHTML=`
  <div class="hero"><b>🧭 Mentor Mode — EARN + BUILD + HEAL + DISCIPLINE</b><div class="muted">Friendly support, strict accountability — रोज़ measurable action.</div></div>
- <div class="card mentor-date-card"><div class="section-title"><h2>📅 Mentor Date</h2><span class="tag">AD ${esc(date)} · BS ${esc(formatBsShort(date))}</span></div>${dateFieldMarkup('mentorSelectedDate',date,'Mentor date')}<div class="kpi three-kpi mentor-date-kpis" style="margin-top:12px"><div class="mini"><b>${td.filter(x=>x.done).length}/${td.length}</b><br><span class="meta">Tasks</span></div><div class="mini"><b>₹${inc.toFixed(0)}</b><br><span class="meta">Income</span></div><div class="mini"><b>₹${ex.toFixed(0)}</b><br><span class="meta">Expense</span></div></div></div>
+ <div class="card mentor-date-card"><div class="section-title"><h2>📅 Mentor Date</h2><span class="tag">AD ${esc(date)} · BS ${esc(formatBsShort(date))}</span></div>${dateFieldMarkup('mentorSelectedDate',date,'Mentor date')}<div class="kpi three-kpi mentor-date-kpis" style="margin-top:12px"><div class="mini"><b>${tdDone}/${tdTotal}</b><br><span class="meta">Tasks</span></div><div class="mini"><b>₹${inc.toFixed(0)}</b><br><span class="meta">Income</span></div><div class="mini"><b>₹${ex.toFixed(0)}</b><br><span class="meta">Expense</span></div></div></div>
  <div class="card mentor-quote-card"><div class="quote-head mentor-quote-head"><div class="quote-title"><div class="row"><span class="tag">${esc(q?.category||'Motivation')}</span></div><div class="meta quote-date">AD ${esc(date)} · BS ${esc(formatBsShort(date))}</div></div><span class="tag">Positive + Practical</span></div><div class="mentor-quote-text">“${esc(q?.text||'आज अपना Quote / Principle जोड़ें और उसे action बनाइए।')}”</div><div class="mentor-quote-author">— ${esc(q?.author||'Mentor')}</div>
  <div class="mentor-quote-form"><input id="mqText" placeholder="नया Quote / Principle लिखें"><input id="mqAuthor" placeholder="Author / Source"><input id="mqCategory" placeholder="Category: Discipline, Finance, Health..."><button class="primary" type="button" onclick="addMentorQuote()">＋ Add Quote / Principle</button></div></div>
  <div class="mentor-grid">
@@ -756,7 +1068,7 @@ function renderMentor(){
  <div class="row" style="margin-top:10px"><button class="primary" type="button" onclick="mentorSave()">💾 Save KPI & Mentor Data</button><button class="secondary" type="button" onclick="delete data.mentorKpis[data.mentorSelectedDate||today()];save();renderMentor()">Reset Selected Day</button></div>
  </div>
  <div class="card mentor-quotes-card"><div class="between"><h2>📚 Mentor Principles / Quotes (${(data.mentorQuotes||[]).length})</h2><span class="meta">Dashboard पर भी automatically दिखेगा</span></div><div class="list" style="margin-top:10px">${(data.mentorQuotes||[]).map(x=>`<div class="item"><div class="between"><div style="min-width:0"><b>“${esc(x.text)}”</b><div class="meta">${esc(x.author||'Mentor')} · ${esc(x.category||'Motivation')}</div></div><button class="danger" type="button" onclick="deleteMentorQuote('${x.id}')">Delete</button></div></div>`).join('')}</div></div>
- <div class="card mentor-rules-card"><div class="between"><div><h2>🧭 Mentor Rules</h2><div class="meta">Rules अब editable हैं — strategy बदलने पर यहाँ से update करें. Changes इसी device पर तुरंत save होते हैं.</div></div><span class="tag">${(data.mentorRules||[]).length} Rules</span></div><div class="mentor-rules-editor">${(data.mentorRules||[]).map((r,i)=>`<div class="mentor-rule-row"><span class="tag">${i+1}</span><textarea class="mentor-rule-input" data-rule-id="${esc(r.id||'')}" rows="2" placeholder="Mentor rule लिखें...">${esc(r.text||'')}</textarea><button class="danger" type="button" onclick="deleteMentorRule('${esc(r.id||'')}')" title="Delete rule">Delete</button></div>`).join('')}</div><div class="row" style="margin-top:10px"><button class="primary" type="button" onclick="mentorSaveRules()">💾 Save Rules</button><button class="secondary" type="button" onclick="addMentorRule()">＋ Add Rule</button><button class="secondary" type="button" onclick="resetMentorRules()">↺ Reset Defaults</button></div></div>`;
+ <div class="card mentor-rules-card"><div class="between"><div><h2>🧭 Mentor Rules</h2><div class="meta">Rules अब editable हैं — strategy बदलने पर यहाँ से update करें. Changes इसी device पर तुरंत save होते हैं.</div></div><span class="tag">${(data.mentorRules||[]).length} Rules</span></div><div class="mentor-rules-editor">${(data.mentorRules||[]).map((r,i)=>`<div class="mentor-rule-row"><span class="tag">${i+1}</span><textarea class="mentor-rule-input" data-rule-id="${esc(r.id||'')}" rows="2" placeholder="Mentor rule लिखें...">${esc(r.text||'')}</textarea><button class="danger" type="button" onclick="deleteMentorRule('${esc(r.id||'')}')" title="Delete rule">Delete</button></div>`).join('')}</div><div class="row" style="margin-top:10px"><button class="primary" type="button" onclick="mentorSaveRules()">💾 Save Rules</button><button class="secondary" type="button" onclick="addMentorRule()">＋ Add Rule</button><button class="secondary" type="button" onclick="resetMentorRules()">↺ Reset Defaults</button></div></div>`;; resizeMentorRules(el);
 }
 
 const LIFEOS_CATEGORIES={
@@ -790,7 +1102,7 @@ function toggleCategoryItem(id,itemId,done){const a=getCategoryItems(id),x=a.fin
 function deleteCategoryItem(id,itemId){saveCategoryItems(id,getCategoryItems(id).filter(x=>x.id!==itemId));renderCategory(id)}
 
 
-function render(){const active=document.querySelector('.section.active');if(!active)return;let id=active.id;if(id==='dashboard')renderDashboard();if(id==='mentor')renderMentor();if(id==='planner')renderPlanner();if(id==='tasks')renderTasks();if(id==='routine')renderRoutine();if(id==='notes')renderNotes();if(id==='journal')renderJournal();if(id==='habits')renderHabits();if(id==='expenses')renderExpenses();if(id==='goals')renderGoals();if(id==='focus')renderFocus();if(LIFEOS_CATEGORIES[id])renderCategory(id);if(id==='settings')renderSettings();if(id==='device-storage')window.renderDeviceStorage?.();restoreDrafts()}
+function render(){const active=document.querySelector('.section.active');if(!active)return;let id=active.id;if(id==='dashboard')renderDashboard();if(id==='mentor')renderMentor();if(id==='planner')renderPlanner();if(id==='tasks')renderTasks();if(id==='routine')renderRoutine();if(id==='notes')renderNotes();if(id==='journal')renderJournal();if(id==='habits')renderHabits();if(id==='expenses')renderExpenses();if(id==='goals')renderGoals();if(id==='focus')renderFocus();if(LIFEOS_CATEGORIES[id])renderCategory(id);if(id==='settings')renderSettings();if(id==='device-storage')window.renderDeviceStorage?.();restoreDrafts();addLazyMoreButton(id)}
 const __localDate = new Date();
 const __yyyy = __localDate.getFullYear();
 const __mm = String(__localDate.getMonth()+1).padStart(2,'0');
@@ -841,4 +1153,5 @@ const __todayInput=document.getElementById('today'); if(__todayInput) __todayInp
     if('requestIdleCallback' in window)requestIdleCallback(run,{timeout:120});
     else requestAnimationFrame(run);
   }
+
 
