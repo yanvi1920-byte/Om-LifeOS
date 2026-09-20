@@ -12,8 +12,6 @@
         "title": "Om-LifeOS",
         "width": 1280,
         "height": 820,
-        "minWidth": 980,
-        "minHeight": 680,
         "resizable": true,
         "fullscreen": false
       }
