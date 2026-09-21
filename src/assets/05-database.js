@@ -242,6 +242,8 @@ window.omDb={
   delete:(section,id)=>DB_NATIVE_RUNTIME?init().then(()=>invoke('db_delete_record',{section:DB_SECTIONS[section]||section,recordId:String(id)})):Promise.resolve(false),
   checkpoint:()=>DB_NATIVE_RUNTIME?init().then(()=>invoke('db_checkpoint')):Promise.resolve(false),
   integrityCheck:()=>DB_NATIVE_RUNTIME?init().then(()=>invoke('db_integrity_check')):Promise.resolve('browser-fallback'),
+  chooseBackup:()=>DB_NATIVE_RUNTIME?init().then(()=>invoke('choose_database_backup')):Promise.resolve(null),
+  restoreFromBackup:backup=>DB_NATIVE_RUNTIME?init().then(()=>invoke('db_restore_from_backup',{backup})):Promise.reject(new Error('Native SQLite recovery is available only in the desktop app')),
   backup:target=>DB_NATIVE_RUNTIME?init().then(()=>invoke('db_backup_to',{target})):Promise.resolve(null),
   autoBackup:()=>DB_NATIVE_RUNTIME?init().then(()=>invoke('db_auto_backup')):Promise.resolve(null),
   getMeta:key=>DB_NATIVE_RUNTIME?init().then(()=>invoke('db_get_meta',{key})):Promise.resolve(null),

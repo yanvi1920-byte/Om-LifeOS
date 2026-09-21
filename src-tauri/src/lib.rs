@@ -1,6 +1,6 @@
 use rusqlite::{backup::Backup, params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
-use std::{fs, path::PathBuf, sync::Mutex};
+use std::{fs, path::{Path, PathBuf}, sync::Mutex};
 use tauri::{AppHandle, Manager, State};
 
 struct DbState(Mutex<Connection>);
@@ -64,7 +64,7 @@ fn migrate(conn: &Connection) -> Result<(), String> {
          INSERT INTO schema_migrations(version,applied_at) VALUES(1,strftime('%s','now'))
             ON CONFLICT(version) DO NOTHING;
          INSERT INTO meta(key,value,updated_at) VALUES('schema_version','1',strftime('%s','now'))
-            ON CONFLICT(key) DO UPDATE SET value='1', updated_at=excluded.updated_at;"
+            ON CONFLICT(key) DO NOTHING;"
     ).map_err(|e| e.to_string())
 }
 
@@ -190,7 +190,10 @@ fn db_auto_backup(app: AppHandle, state: State<'_, DbState>) -> Result<String, S
         let conn = state.0.lock().map_err(|_| "Database lock poisoned".to_string())?;
         conn.query_row("SELECT CAST(value AS INTEGER) FROM meta WHERE key='last_auto_backup_stamp'", [], |r| r.get(0)).unwrap_or(0)
     };
-    if current_stamp > 0 && current_stamp == previous_stamp {
+    // No recorded data change means there is nothing new to snapshot.
+    // In particular, do not create endless backups when a fresh/empty DB
+    // has never received a last_data_saved_at stamp.
+    if current_stamp <= 0 || current_stamp == previous_stamp {
         return Ok(String::new());
     }
 
@@ -358,6 +361,86 @@ fn db_integrity_check(state: State<'_, DbState>) -> Result<String, String> {
     conn.query_row("PRAGMA integrity_check", [], |r| r.get(0)).map_err(|e| e.to_string())
 }
 
+fn validate_backup_file(path: &Path) -> Result<(), String> {
+    if !path.is_file() { return Err("Selected backup file does not exist.".into()); }
+    let conn = Connection::open(path).map_err(|e| format!("Could not open backup: {e}"))?;
+    configure(&conn)?;
+    let integrity: String = conn.query_row("PRAGMA integrity_check", [], |r| r.get(0))
+        .map_err(|e| format!("Could not check backup integrity: {e}"))?;
+    if integrity != "ok" { return Err(format!("Selected backup failed integrity check: {integrity}")); }
+    Ok(())
+}
+
+fn preserve_live_database(path: &Path) -> Result<PathBuf, String> {
+    let stamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)
+        .map_err(|e| e.to_string())?;
+    let base = format!("om-lifeos-corrupt-{}-{}", stamp.as_secs(), stamp.subsec_millis());
+    let dir = path.parent().ok_or_else(|| "Database folder is unavailable.".to_string())?;
+    let quarantine = dir.join(base);
+    fs::create_dir_all(&quarantine).map_err(|e| e.to_string())?;
+    let mut copied = false;
+    for suffix in ["", "-wal", "-shm"] {
+        let src = if suffix.is_empty() { path.to_path_buf() } else { PathBuf::from(format!("{}{}", path.to_string_lossy(), suffix)) };
+        if src.is_file() {
+            let name = src.file_name().and_then(|x| x.to_str()).unwrap_or("database");
+            fs::copy(&src, quarantine.join(name)).map_err(|e| format!("Could not preserve damaged database file {name}: {e}"))?;
+            copied = true;
+        }
+    }
+    if !copied { return Err("Live database file was not found.".into()); }
+    Ok(quarantine)
+}
+
+#[derive(Debug, Serialize)]
+struct DbRestoreResult {
+    restored_from: String,
+    preserved_damaged_copy: String,
+    integrity: String,
+    records: i64,
+}
+
+#[tauri::command]
+fn choose_database_backup(app: AppHandle) -> Result<Option<String>, String> {
+    #[cfg(windows)]
+    {
+        let default_dir = app.path().document_dir().ok().map(|p| p.join("Om-LifeOS").join("DatabaseBackups"));
+        let mut dialog = rfd::FileDialog::new().set_title("Choose verified LifeOS SQLite backup");
+        if let Some(dir) = default_dir.as_ref() { if dir.is_dir() { dialog = dialog.set_directory(dir); } }
+        Ok(dialog.add_filter("SQLite backup", &["sqlite3"]).pick_file().map(|p| p.to_string_lossy().into_owned()))
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = app;
+        Err("Native database backup picker is currently available on Windows.".into())
+    }
+}
+
+#[tauri::command]
+fn db_restore_from_backup(app: AppHandle, state: State<'_, DbState>, backup: String) -> Result<DbRestoreResult, String> {
+    let backup_path = PathBuf::from(backup);
+    validate_backup_file(&backup_path)?;
+    let live_path = db_path(&app)?;
+
+    // Preserve the damaged live database (and any WAL/SHM sidecars) before replacing its pages.
+    let preserved = preserve_live_database(&live_path)?;
+
+    let source = Connection::open(&backup_path).map_err(|e| format!("Could not open verified backup: {e}"))?;
+    configure(&source)?;
+    let mut live = state.0.lock().map_err(|_| "Database lock poisoned".to_string())?;
+    {
+        let backup_op = Backup::new(&source, &mut *live).map_err(|e| format!("Could not restore backup into live database: {e}"))?;
+        backup_op.run_to_completion(64, std::time::Duration::from_millis(8), None)
+            .map_err(|e| format!("Restore failed: {e}"))?;
+    }
+    configure(&live)?;
+    migrate(&live)?;
+    live.execute_batch("PRAGMA wal_checkpoint(TRUNCATE); PRAGMA optimize;").map_err(|e| e.to_string())?;
+    let integrity: String = live.query_row("PRAGMA integrity_check", [], |r| r.get(0)).map_err(|e| e.to_string())?;
+    if integrity != "ok" { return Err(format!("Restore completed but integrity check failed: {integrity}")); }
+    let records: i64 = live.query_row("SELECT COUNT(*) FROM records", [], |r| r.get(0)).map_err(|e| e.to_string())?;
+    Ok(DbRestoreResult { restored_from: backup_path.to_string_lossy().into_owned(), preserved_damaged_copy: preserved.to_string_lossy().into_owned(), integrity, records })
+}
+
 
 #[tauri::command]
 fn choose_export_directory() -> Result<Option<String>, String> {
@@ -432,7 +515,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             db_init, db_total_count, db_upsert_record, db_upsert_records, db_delete_record, db_delete_records, db_backup_to, db_auto_backup, db_list_records, db_list_record_ids,
             db_count_records, db_search_records, db_finance_summary, db_get_record, db_set_meta, db_get_meta, db_get_meta_stamp,
-            db_checkpoint, db_integrity_check, choose_export_directory, save_export_file
+            db_checkpoint, db_integrity_check, choose_database_backup, db_restore_from_backup, choose_export_directory, save_export_file
         ])
         .run(tauri::generate_context!())
         .expect("error while running ॐ");

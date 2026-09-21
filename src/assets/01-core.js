@@ -1,7 +1,7 @@
 
 
 
-const LIFEOS_BUILD_VERSION='1.8.9';
+const LIFEOS_BUILD_VERSION='1.8.2';
 window.__LIFEOS_BUILD_VERSION=LIFEOS_BUILD_VERSION;
 console.info('Om-LifeOS build',LIFEOS_BUILD_VERSION);
 const KEY='lifeos_clean_v5';

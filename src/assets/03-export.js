@@ -1,75 +1,13 @@
 
-  /* LifeOS Backup & Export — native Windows folder bridge.
-     Do not persist a browser FileSystemDirectoryHandle here. Tauri/Windows
-     stores a real folder path and Rust performs the actual file I/O. */
+  /* LifeOS Backup & Export — local computer folder connection.
+     Desktop/Tauri keeps using the native folder bridge. Standalone HTML uses the
+     browser File System Access API, so exports are written directly to the
+     connected local folder. */
   const COMPUTER_PATH_KEY='lifeos-computer-export-path-v2';
-  const BROWSER_FOLDER_DB='lifeos-browser-export-folder-v1';
+  const COMPUTER_HANDLE_DB='lifeos-local-folder-v1';
+  const COMPUTER_HANDLE_STORE='handles';
   let computerDirectoryPath='';
-  let browserDirectoryHandle=null;
-
-  function browserFolderSupported(){
-    return !isMobileRuntime() && typeof window.showDirectoryPicker==='function';
-  }
-
-  async function loadBrowserFolder(){
-    if(!browserFolderSupported())return null;
-    try{
-      const db=await new Promise((resolve,reject)=>{
-        const req=indexedDB.open(BROWSER_FOLDER_DB,1);
-        req.onupgradeneeded=()=>{ if(!req.result.objectStoreNames.contains('handles')) req.result.createObjectStore('handles'); };
-        req.onsuccess=()=>resolve(req.result);
-        req.onerror=()=>reject(req.error);
-      });
-      browserDirectoryHandle=await new Promise((resolve,reject)=>{
-        const tx=db.transaction('handles','readonly');
-        const req=tx.objectStore('handles').get('root');
-        req.onsuccess=()=>resolve(req.result||null);
-        req.onerror=()=>reject(req.error);
-      });
-      db.close();
-      if(browserDirectoryHandle && typeof browserDirectoryHandle.queryPermission==='function'){
-        const perm=await browserDirectoryHandle.queryPermission({mode:'readwrite'});
-        if(perm!=='granted')return null;
-      }
-      return browserDirectoryHandle;
-    }catch(e){ browserDirectoryHandle=null; return null; }
-  }
-
-  async function saveBrowserFolder(handle){
-    if(!handle)return false;
-    browserDirectoryHandle=handle;
-    try{
-      const db=await new Promise((resolve,reject)=>{
-        const req=indexedDB.open(BROWSER_FOLDER_DB,1);
-        req.onupgradeneeded=()=>{ if(!req.result.objectStoreNames.contains('handles')) req.result.createObjectStore('handles'); };
-        req.onsuccess=()=>resolve(req.result);
-        req.onerror=()=>reject(req.error);
-      });
-      await new Promise((resolve,reject)=>{
-        const tx=db.transaction('handles','readwrite');
-        tx.objectStore('handles').put(handle,'root');
-        tx.oncomplete=resolve; tx.onerror=()=>reject(tx.error);
-      });
-      db.close();
-      return true;
-    }catch(e){ console.warn('Browser folder persistence failed',e); return true; }
-  }
-
-  async function clearBrowserFolder(){
-    browserDirectoryHandle=null;
-    try{
-      const db=await new Promise((resolve,reject)=>{
-        const req=indexedDB.open(BROWSER_FOLDER_DB,1);
-        req.onupgradeneeded=()=>{ if(!req.result.objectStoreNames.contains('handles')) req.result.createObjectStore('handles'); };
-        req.onsuccess=()=>resolve(req.result); req.onerror=()=>reject(req.error);
-      });
-      await new Promise((resolve,reject)=>{
-        const tx=db.transaction('handles','readwrite'); tx.objectStore('handles').delete('root');
-        tx.oncomplete=resolve; tx.onerror=()=>reject(tx.error);
-      });
-      db.close();
-    }catch(e){}
-  }
+  let computerDirectoryHandle=null;
 
   function nativeInvoke(command,args){
     const invoke=window.__TAURI__?.core?.invoke;
@@ -78,170 +16,122 @@
     if(internals && typeof internals.invoke==='function')return internals.invoke(command,args);
     throw new Error('Native Tauri bridge unavailable');
   }
+  function hasNativeBridge(){return typeof window.__TAURI__?.core?.invoke==='function' || typeof window.__TAURI_INTERNALS__?.invoke==='function'}
+  function hasLocalFolderPicker(){return typeof window.showDirectoryPicker==='function'}
+
+  function openComputerHandleDb(){
+    return new Promise((resolve,reject)=>{
+      if(!('indexedDB' in window)){reject(new Error('IndexedDB unavailable'));return}
+      const req=indexedDB.open(COMPUTER_HANDLE_DB,1);
+      req.onupgradeneeded=()=>{try{req.result.createObjectStore(COMPUTER_HANDLE_STORE)}catch(e){}}
+      req.onsuccess=()=>resolve(req.result);
+      req.onerror=()=>reject(req.error||new Error('Folder connection storage unavailable'));
+    });
+  }
+  async function readStoredComputerHandle(){
+    try{const db=await openComputerHandleDb();return await new Promise((resolve,reject)=>{const tx=db.transaction(COMPUTER_HANDLE_STORE,'readonly');const req=tx.objectStore(COMPUTER_HANDLE_STORE).get('computer');req.onsuccess=()=>resolve(req.result||null);req.onerror=()=>reject(req.error||new Error('Could not read folder connection'))})}catch(e){return null}
+  }
+  async function writeStoredComputerHandle(handle){
+    try{const db=await openComputerHandleDb();await new Promise((resolve,reject)=>{const tx=db.transaction(COMPUTER_HANDLE_STORE,'readwrite');tx.objectStore(COMPUTER_HANDLE_STORE).put(handle,'computer');tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error||new Error('Could not save folder connection'));tx.onabort=()=>reject(tx.error||new Error('Could not save folder connection'))})}catch(e){console.warn('Local folder connection persistence unavailable',e)}
+  }
+  async function clearStoredComputerHandle(){
+    try{const db=await openComputerHandleDb();await new Promise((resolve,reject)=>{const tx=db.transaction(COMPUTER_HANDLE_STORE,'readwrite');tx.objectStore(COMPUTER_HANDLE_STORE).delete('computer');tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error)})}catch(e){}
+  }
 
   async function loadComputerConnection(){
     try{
-      computerDirectoryPath=String(localStorage.getItem(COMPUTER_PATH_KEY)||'').trim();
+      if(hasNativeBridge()){
+        computerDirectoryPath=String(localStorage.getItem(COMPUTER_PATH_KEY)||'').trim();
+        return computerDirectoryPath||null;
+      }
+      if(isMobileRuntime() || !hasLocalFolderPicker())return null;
+      const handle=await readStoredComputerHandle();
+      if(!handle)return null;
+      computerDirectoryHandle=handle;
+      computerDirectoryPath=String(handle.name||'').trim();
+      try{if(await handle.queryPermission({mode:'readwrite'})!=='granted')computerDirectoryPath=''}catch(e){computerDirectoryPath=''}
       return computerDirectoryPath||null;
-    }catch(e){
-      computerDirectoryPath='';
-      return null;
-    }
+    }catch(e){computerDirectoryPath='';computerDirectoryHandle=null;return null}
   }
 
-  async function saveComputerConnection(path){
+  async function saveComputerConnection(pathOrHandle){
     try{
-      computerDirectoryPath=String(path||'').trim();
-      if(computerDirectoryPath)localStorage.setItem(COMPUTER_PATH_KEY,computerDirectoryPath);
-      else localStorage.removeItem(COMPUTER_PATH_KEY);
+      if(hasNativeBridge()){
+        computerDirectoryPath=String(pathOrHandle||'').trim();
+        if(computerDirectoryPath)localStorage.setItem(COMPUTER_PATH_KEY,computerDirectoryPath);else localStorage.removeItem(COMPUTER_PATH_KEY);
+      }else if(pathOrHandle && typeof pathOrHandle==='object'){
+        computerDirectoryHandle=pathOrHandle;
+        computerDirectoryPath=String(pathOrHandle.name||'').trim();
+        await writeStoredComputerHandle(pathOrHandle);
+      }
     }catch(e){console.warn('Computer connection persistence failed',e)}
   }
-
-  async function clearComputerConnection(){
-    computerDirectoryPath='';
-    try{localStorage.removeItem(COMPUTER_PATH_KEY)}catch(e){}
-    await clearBrowserFolder();
-    renderSettings();
-  }
+  async function clearComputerConnection(){computerDirectoryPath='';computerDirectoryHandle=null;try{localStorage.removeItem(COMPUTER_PATH_KEY)}catch(e){}await clearStoredComputerHandle();renderSettings()}
 
   async function chooseComputerFolder(){
-    const path=await nativeInvoke('choose_export_directory');
-    if(!path)return null;
-    await saveComputerConnection(path);
-    return path;
-  }
-
-  function computerConnected(){return !!computerDirectoryPath || !!browserDirectoryHandle}
-
-  function computerStatusHtml(){
-    const hasNativeBridge=typeof window.__TAURI__?.core?.invoke==='function' ||
-      typeof window.__TAURI_INTERNALS__?.invoke==='function';
-    if(isMobileRuntime())return '<span class="backup-connected">● Mobile storage active</span>';
-    if(!hasNativeBridge){
-      if(browserDirectoryHandle)return '<span class="backup-connected">● Browser folder connected</span>';
-      return '<span class="backup-connected backup-disconnected">● Computer folder not connected</span>';
+    if(hasNativeBridge()){
+      const path=await nativeInvoke('choose_export_directory');
+      if(!path)return null;
+      await saveComputerConnection(path);return path;
     }
-    return computerConnected()
-      ? `<span class="backup-connected">● Connected: ${esc(computerDirectoryPath)}</span>`
-      : `<span class="backup-connected backup-disconnected">● Not connected</span>`;
-  }
-
-  async function connectComputer(){
-    const hasNativeBridge=typeof window.__TAURI__?.core?.invoke==='function' ||
-      typeof window.__TAURI_INTERNALS__?.invoke==='function';
-    if(!hasNativeBridge && !isMobileRuntime()){
-      if(!browserFolderSupported()){
-        toast('This browser does not support direct folder connection. Use Chrome/Edge or the Tauri desktop app.');
-        return false;
-      }
-      try{
-        const handle=await window.showDirectoryPicker({mode:'readwrite'});
-        if(!handle)return false;
-        await saveBrowserFolder(handle);
-        renderSettings();
-        toast(`✓ Computer folder connected: ${handle.name}`);
-        return true;
-      }catch(e){
-        if(e?.name!=='AbortError')toast('Computer folder connection failed: '+(e?.message||'Permission denied'));
-        return false;
-      }
-    }
-    if(isMobileRuntime()){
-      toast('Mobile: exports save to Downloads or Share. No Windows folder picker is used.');
-      return false;
-    }
-    try{
-      const path=await chooseComputerFolder();
-      if(!path)return false;
-      renderSettings();
-      toast(`✓ Computer connected: ${path}`);
-      return true;
-    }catch(e){
-      if(e?.name!=='AbortError')toast('Computer connection failed: '+(e?.message||'Native folder picker unavailable'));
-      return false;
-    }
-  }
-
-  async function ensureComputerFolderForExport(){
     if(isMobileRuntime())return null;
-    if(!computerDirectoryPath){
-      const ok=await connectComputer();
-      if(!ok)return null;
-    }
-    return computerDirectoryPath;
+    if(!hasLocalFolderPicker())throw new Error('Local folder connection is not supported by this browser. Use Chrome or Edge.');
+    const handle=await window.showDirectoryPicker({mode:'readwrite',id:'om-lifeos-export-folder'});
+    if(!handle)return null;
+    await saveComputerConnection(handle);return handle.name||'Local folder';
   }
+
+  function computerConnected(){return !!(computerDirectoryPath && (hasNativeBridge() || computerDirectoryHandle))}
+  function computerStatusHtml(){
+    if(isMobileRuntime())return '<span class="backup-connected">● Mobile storage active</span>';
+    if(computerConnected())return `<span class="backup-connected">● Local folder: ${esc(computerDirectoryPath)}</span>`;
+    if(hasNativeBridge())return '<span class="backup-connected backup-disconnected">● Local computer not connected</span>';
+    if(hasLocalFolderPicker())return '<span class="backup-connected backup-disconnected">● Local folder not connected</span>';
+    return '<span class="backup-connected backup-disconnected">● Local folder connection unavailable</span>';
+  }
+  async function connectComputer(){
+    if(isMobileRuntime()){toast('Mobile storage uses Downloads or Share.');return false}
+    try{const path=await chooseComputerFolder();if(!path)return false;renderSettings();toast(`✓ Local computer folder connected: ${path}`);return true}
+    catch(e){if(e?.name!=='AbortError')toast('Local connection failed: '+(e?.message||'Folder picker unavailable'));return false}
+  }
+  async function ensureComputerFolderForExport(){if(isMobileRuntime())return null;if(!computerConnected()){const ok=await connectComputer();if(!ok)return null}return computerDirectoryPath||computerDirectoryHandle}
 
   async function saveComputerForExport(filename,content,mime,subfolder=''){
     if(isMobileRuntime())return saveBlobForMobile(filename,content,mime);
-
-    // Standalone/local HTML preview has no Tauri bridge. Fall back to a normal
-    // browser download instead of failing with a native-bridge error.
-    const hasNativeBridge=typeof window.__TAURI__?.core?.invoke==='function' ||
-      typeof window.__TAURI_INTERNALS__?.invoke==='function';
-    if(!hasNativeBridge){
-      if(browserFolderSupported() && browserDirectoryHandle){
-        try{
-          const blob=content instanceof Blob ? content : new Blob([content],{type:mime||'application/octet-stream'});
-          if(typeof browserDirectoryHandle.requestPermission==='function'){
-            const perm=await browserDirectoryHandle.requestPermission({mode:'readwrite'});
-            if(perm!=='granted')throw new Error('Folder write permission was not granted.');
-          }
-          const fileHandle=await browserDirectoryHandle.getFileHandle(filename,{create:true});
-          const writable=await fileHandle.createWritable();
-          await writable.write(blob);
-          await writable.close();
-          toast(`✓ Saved to connected folder: ${filename}`);
-          return true;
-        }catch(e){
-          console.warn('Browser folder save failed',e);
-          if(/permission|not allowed|denied|invalid state/i.test(e?.message||''))await clearBrowserFolder();
-        }
-      }
+    if(hasNativeBridge()){
+      const root=await ensureComputerFolderForExport();if(!root)return false;
       try{
-        const blob=content instanceof Blob ? content : new Blob([content],{type:mime||'application/octet-stream'});
-        const url=URL.createObjectURL(blob);
-        const a=document.createElement('a'); a.href=url; a.download=filename; a.rel='noopener';
-        document.body.appendChild(a); a.click(); a.remove();
-        setTimeout(()=>URL.revokeObjectURL(url),15000);
-        toast(`✓ Download started: ${filename}`);
-        return true;
+        const blob=content instanceof Blob?content:new Blob([content],{type:mime||'application/octet-stream'});
+        const bytes=new Uint8Array(await blob.arrayBuffer());
+        const savedPath=await nativeInvoke('save_export_file',{root,subfolder:String(subfolder||'').trim(),filename:String(filename),bytes:Array.from(bytes)});
+        toast(`✓ Saved: ${savedPath}`);return true;
       }catch(e){
-        toast('Browser download failed: '+(e?.message||'Unknown error'));
-        return false;
+        console.error('Native computer folder save failed',e);const message=e?.message||String(e)||'Folder permission/error';
+        if(/no longer exists|not found|cannot find|could not find/i.test(message))await clearComputerConnection();
+        toast('Save failed: '+message);return false;
       }
     }
-
-    const root=await ensureComputerFolderForExport();
-    if(!root)return false;
-
+    if(!hasLocalFolderPicker()){toast('Local folder connection is not supported by this browser.');return false}
     try{
-      const blob=content instanceof Blob
-        ? content
-        : new Blob([content],{type:mime||'application/octet-stream'});
-      const bytes=new Uint8Array(await blob.arrayBuffer());
-      const savedPath=await nativeInvoke('save_export_file',{
-        root,
-        subfolder:String(subfolder||'').trim(),
-        filename:String(filename),
-        bytes:Array.from(bytes)
-      });
-      toast(`✓ Saved: ${savedPath}`);
-      return true;
+      if(!computerDirectoryHandle){const ok=await connectComputer();if(!ok)return false}
+      const permission=await computerDirectoryHandle.requestPermission({mode:'readwrite'});
+      if(permission!=='granted'){toast('Local folder write permission was not granted.');return false}
+      let target=computerDirectoryHandle;const folder=String(subfolder||'').trim();
+      if(folder)target=await target.getDirectoryHandle(folder,{create:true});
+      const file=await target.getFileHandle(String(filename),{create:true});
+      const writable=await file.createWritable();
+      const blob=content instanceof Blob?content:new Blob([content],{type:mime||'application/octet-stream'});
+      await writable.write(blob);await writable.close();
+      toast(`✓ Saved locally: ${folder?folder+'/':''}${filename}`);return true;
     }catch(e){
-      console.error('Native computer folder save failed',e);
-      const message=e?.message||String(e)||'Folder permission/error';
-      /* If the previously selected folder was deleted/moved, clear it so the
-         next export forces a fresh native folder selection instead of looping. */
-      if(/no longer exists|not found|cannot find|could not find/i.test(message)){
-        await clearComputerConnection();
-      }
-      toast('Save failed: '+message);
+      console.error('Local folder save failed',e);
+      if(e?.name==='NotAllowedError')toast('Local folder permission was denied. Connect Computer again.');
+      else if(e?.name!=='AbortError')toast('Local save failed: '+(e?.message||String(e)));
       return false;
     }
   }
 
-  loadComputerConnection();
-  loadBrowserFolder().then(()=>{ try{ renderSettings(); }catch(e){} });
+  loadComputerConnection().then(()=>{if(typeof renderSettings==='function')renderSettings()}).catch(()=>{});
   /* Selection is persisted locally so the next export starts with the user's last chosen menu set. */
 
   async function backupPayload(){
