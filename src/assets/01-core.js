@@ -1,7 +1,7 @@
 
 
 
-const LIFEOS_BUILD_VERSION='1.7.1';
+const LIFEOS_BUILD_VERSION='1.8.9';
 window.__LIFEOS_BUILD_VERSION=LIFEOS_BUILD_VERSION;
 console.info('Om-LifeOS build',LIFEOS_BUILD_VERSION);
 const KEY='lifeos_clean_v5';
@@ -25,6 +25,57 @@ data.categories=(data.categories&&typeof data.categories==='object')?data.catego
 data.mentor={...{startingCapital:300000,startDate:'',survivalReserve:180000,emergencyReserve:60000,careerFund:30000,opportunityFund:30000,dailyBurn:2000,monthlyBurn:60000,balanceMode:'auto',manualBalance:0},...(data.mentor||{})};
 data.mentorKpis=(data.mentorKpis&&typeof data.mentorKpis==='object')?data.mentorKpis:{};
 data.mentorQuotes=Array.isArray(data.mentorQuotes)?data.mentorQuotes:[];
+
+// One-time safe data hygiene: remove only exact duplicate records and empty
+// non-record entries. Records with different IDs are never merged because they
+// may represent legitimate repeated events. This keeps old imports/migrations
+// from making the app and exports carry exact duplicate rows forever.
+function stableDataKey(value){
+  try{
+    return JSON.stringify(value,(key,val)=>{
+      if(val&&typeof val==='object'&&!Array.isArray(val)){
+        const out={}; Object.keys(val).sort().forEach(k=>{out[k]=val[k]}); return out;
+      }
+      return val;
+    });
+  }catch(_){return String(value)}
+}
+function dedupeExactArray(arr){
+  if(!Array.isArray(arr))return [];
+  const seen=new Set(),out=[];
+  for(const item of arr){
+    if(item==null)continue;
+    const key=stableDataKey(item);
+    if(seen.has(key))continue;
+    seen.add(key);out.push(item);
+  }
+  return out;
+}
+function cleanStoredDuplicates(){
+  const arrayKeys=['tasks','notes','journal','expenses','income','habits','routines','goals','focusSessions','personal','professional','spiritual','economical','mental','social','moral','mentorQuotes','mentorRules'];
+  let changed=false;
+  for(const key of arrayKeys){
+    if(Array.isArray(data[key])){
+      const next=dedupeExactArray(data[key]);
+      if(next.length!==data[key].length){data[key]=next;changed=true;}
+    }
+  }
+  if(data.categories&&typeof data.categories==='object'){
+    for(const [key,items] of Object.entries(data.categories)){
+      if(Array.isArray(items)){
+        const next=dedupeExactArray(items);
+        if(next.length!==items.length){data.categories[key]=next;changed=true;}
+      }
+    }
+  }
+  if(data.__drafts&&typeof data.__drafts==='object'){
+    for(const [key,value] of Object.entries(data.__drafts)){
+      if(value===''||value==null){delete data.__drafts[key];changed=true;}
+    }
+  }
+  return changed;
+}
+const __storedDataWasCleaned=cleanStoredDuplicates();
 
 // Reactive dirty tracking: mutations mark only the affected top-level data section.
 // This lets the native SQLite mirror write only changed sections instead of
@@ -58,6 +109,7 @@ function makeReactiveData(root){
   return wrap(root,'__root');
 }
 data=makeReactiveData(data);
+if(__storedDataWasCleaned){try{localStorage.setItem(KEY,JSON.stringify(data));}catch(_){}}
 // One-time cleanup: older built-in entries used the label 'Mentor Principle' as an author.
 data.mentorQuotes=data.mentorQuotes.map(q=>({...q,author:String(q?.author||'Mentor')==='Mentor Principle'?'Mentor':(q?.author||'Mentor')}));
 // Normalize/sanitize stored rich text from older versions before it is rendered.
@@ -666,7 +718,7 @@ function renderDashboard(){
  const inc=data.income.filter(x=>x.date===today()).reduce((a,b)=>a+Number(b.amount||0),0);
  const h=data.habits.filter(x=>x.date===today()),hd=h.filter(x=>x.done).length;
  document.getElementById('dashboard').innerHTML=`
- <div class="hero"><b>आज का Dashboard</b><div class="muted">Simple overview — all your detailed work stays in its own sections.</div></div><div class="grid dashboard-kpi-grid"><div class="card"><div class="label">आज के Tasks</div><div class="metric">${done}/${td.length}</div><div class="progress"><i style="width:${td.length?done/td.length*100:0}%"></i></div></div><div class="card"><div class="label">आज की Habits</div><div class="metric">${hd}/${h.length}</div></div><div class="card"><div class="label">आज का Balance</div><div class="metric">₹${(inc-ex).toFixed(2)}</div></div><div class="card"><div class="label">💰 Runway</div><div class="metric">${mentorFinance().runway.toFixed(1)} days</div></div></div><div class="card dashboard-finance-card"><h2>💰 Today's Finance</h2><div class="two dashboard-finance" style="grid-template-columns:repeat(2,minmax(0,1fr));"><div class="dashboard-finance-box income-box"><div class="label">Income</div><div class="money income">₹${inc.toFixed(2)}</div></div><div class="dashboard-finance-box expense-box"><div class="label">Expenses</div><div class="money expense">₹${ex.toFixed(2)}</div></div></div></div><div class="mentor-grid"><div class="card dashboard-quote-card"><div class="quote-head"><div class="dashboard-quote-date-wrap"><div class="meta quote-date dashboard-quote-date">AD ${esc(today())} · BS ${esc(formatBsShort(today()))}</div></div><div class="quote-title"><h2>🧭 Today's Mentor Principle / Quote</h2></div><div class="mentor-action-stack"><button class="secondary" type="button" onclick="show('mentor')">Open Mentor</button></div></div><div class="dashboard-quote-text">“${esc(mentorQuoteForDate(today())?.text||'आज का छोटा अनुशासन, कल की बड़ी स्वतंत्रता बनता है।')}”</div><div class="meta dashboard-quote-author">— ${esc(mentorQuoteForDate(today())?.author||'Mentor')} · ${esc(mentorQuoteForDate(today())?.category||'Discipline')}</div></div></div><div class="card" style="margin-top:16px"><h2>📊 Finance Overview</h2><div id="financeDashboardChart" class="muted">Loading…</div></div>`;
+ <div class="hero"><b>आज का Dashboard</b><div class="muted">Simple overview — all your detailed work stays in its own sections.</div></div><div class="grid dashboard-kpi-grid"><div class="card"><div class="label">आज के Tasks</div><div class="metric">${done}/${td.length}</div><div class="progress"><i style="width:${td.length?done/td.length*100:0}%"></i></div></div><div class="card"><div class="label">आज की Habits</div><div class="metric">${hd}/${h.length}</div></div><div class="card"><div class="label">आज का Balance</div><div class="metric">₹${(inc-ex).toFixed(2)}</div></div><div class="card"><div class="label">💰 Runway</div><div class="metric">${mentorFinance().runway.toFixed(1)} days</div></div></div><div class="card dashboard-finance-card"><h2>💰 Today's Finance</h2><div class="two dashboard-finance" style="grid-template-columns:repeat(2,minmax(0,1fr));"><div class="dashboard-finance-box income-box"><div class="label">Income</div><div class="money income">₹${inc.toFixed(2)}</div></div><div class="dashboard-finance-box expense-box"><div class="label">Expenses</div><div class="money expense">₹${ex.toFixed(2)}</div></div></div></div><div class="card dashboard-finance-overview" style="margin-top:12px"><h2>📊 Finance Overview</h2><div id="financeDashboardChart" class="muted">Loading…</div></div><div class="mentor-grid"><div class="card dashboard-quote-card"><div class="quote-head"><div class="dashboard-quote-date-wrap"><div class="meta quote-date dashboard-quote-date">AD ${esc(today())} · BS ${esc(formatBsShort(today()))}</div></div><div class="quote-title"><h2>🧭 Today's Mentor Principle / Quote</h2></div><div class="mentor-action-stack"><button class="secondary" type="button" onclick="show('mentor')">Open Mentor</button></div></div><div class="dashboard-quote-text">“${esc(mentorQuoteForDate(today())?.text||'आज का छोटा अनुशासन, कल की बड़ी स्वतंत्रता बनता है।')}”</div><div class="meta dashboard-quote-author">— ${esc(mentorQuoteForDate(today())?.author||'Mentor')} · ${esc(mentorQuoteForDate(today())?.category||'Discipline')}</div></div></div>`;
  drawFinanceDashboardChart();
 }
 

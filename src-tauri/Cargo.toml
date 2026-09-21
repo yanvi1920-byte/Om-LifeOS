@@ -1,6 +1,6 @@
 [package]
 name = "lifeos"
-version = "1.7.1"
+version = "1.8.9"
 description = "LifeOS — lightweight personal life management app"
 authors = ["LifeOS"]
 edition = "2021"

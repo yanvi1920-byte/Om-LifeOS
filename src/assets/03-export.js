@@ -3,7 +3,73 @@
      Do not persist a browser FileSystemDirectoryHandle here. Tauri/Windows
      stores a real folder path and Rust performs the actual file I/O. */
   const COMPUTER_PATH_KEY='lifeos-computer-export-path-v2';
+  const BROWSER_FOLDER_DB='lifeos-browser-export-folder-v1';
   let computerDirectoryPath='';
+  let browserDirectoryHandle=null;
+
+  function browserFolderSupported(){
+    return !isMobileRuntime() && typeof window.showDirectoryPicker==='function';
+  }
+
+  async function loadBrowserFolder(){
+    if(!browserFolderSupported())return null;
+    try{
+      const db=await new Promise((resolve,reject)=>{
+        const req=indexedDB.open(BROWSER_FOLDER_DB,1);
+        req.onupgradeneeded=()=>{ if(!req.result.objectStoreNames.contains('handles')) req.result.createObjectStore('handles'); };
+        req.onsuccess=()=>resolve(req.result);
+        req.onerror=()=>reject(req.error);
+      });
+      browserDirectoryHandle=await new Promise((resolve,reject)=>{
+        const tx=db.transaction('handles','readonly');
+        const req=tx.objectStore('handles').get('root');
+        req.onsuccess=()=>resolve(req.result||null);
+        req.onerror=()=>reject(req.error);
+      });
+      db.close();
+      if(browserDirectoryHandle && typeof browserDirectoryHandle.queryPermission==='function'){
+        const perm=await browserDirectoryHandle.queryPermission({mode:'readwrite'});
+        if(perm!=='granted')return null;
+      }
+      return browserDirectoryHandle;
+    }catch(e){ browserDirectoryHandle=null; return null; }
+  }
+
+  async function saveBrowserFolder(handle){
+    if(!handle)return false;
+    browserDirectoryHandle=handle;
+    try{
+      const db=await new Promise((resolve,reject)=>{
+        const req=indexedDB.open(BROWSER_FOLDER_DB,1);
+        req.onupgradeneeded=()=>{ if(!req.result.objectStoreNames.contains('handles')) req.result.createObjectStore('handles'); };
+        req.onsuccess=()=>resolve(req.result);
+        req.onerror=()=>reject(req.error);
+      });
+      await new Promise((resolve,reject)=>{
+        const tx=db.transaction('handles','readwrite');
+        tx.objectStore('handles').put(handle,'root');
+        tx.oncomplete=resolve; tx.onerror=()=>reject(tx.error);
+      });
+      db.close();
+      return true;
+    }catch(e){ console.warn('Browser folder persistence failed',e); return true; }
+  }
+
+  async function clearBrowserFolder(){
+    browserDirectoryHandle=null;
+    try{
+      const db=await new Promise((resolve,reject)=>{
+        const req=indexedDB.open(BROWSER_FOLDER_DB,1);
+        req.onupgradeneeded=()=>{ if(!req.result.objectStoreNames.contains('handles')) req.result.createObjectStore('handles'); };
+        req.onsuccess=()=>resolve(req.result); req.onerror=()=>reject(req.error);
+      });
+      await new Promise((resolve,reject)=>{
+        const tx=db.transaction('handles','readwrite'); tx.objectStore('handles').delete('root');
+        tx.oncomplete=resolve; tx.onerror=()=>reject(tx.error);
+      });
+      db.close();
+    }catch(e){}
+  }
 
   function nativeInvoke(command,args){
     const invoke=window.__TAURI__?.core?.invoke;
@@ -34,6 +100,7 @@
   async function clearComputerConnection(){
     computerDirectoryPath='';
     try{localStorage.removeItem(COMPUTER_PATH_KEY)}catch(e){}
+    await clearBrowserFolder();
     renderSettings();
   }
 
@@ -44,16 +111,41 @@
     return path;
   }
 
-  function computerConnected(){return !!computerDirectoryPath}
+  function computerConnected(){return !!computerDirectoryPath || !!browserDirectoryHandle}
 
   function computerStatusHtml(){
+    const hasNativeBridge=typeof window.__TAURI__?.core?.invoke==='function' ||
+      typeof window.__TAURI_INTERNALS__?.invoke==='function';
     if(isMobileRuntime())return '<span class="backup-connected">● Mobile storage active</span>';
+    if(!hasNativeBridge){
+      if(browserDirectoryHandle)return '<span class="backup-connected">● Browser folder connected</span>';
+      return '<span class="backup-connected backup-disconnected">● Computer folder not connected</span>';
+    }
     return computerConnected()
       ? `<span class="backup-connected">● Connected: ${esc(computerDirectoryPath)}</span>`
       : `<span class="backup-connected backup-disconnected">● Not connected</span>`;
   }
 
   async function connectComputer(){
+    const hasNativeBridge=typeof window.__TAURI__?.core?.invoke==='function' ||
+      typeof window.__TAURI_INTERNALS__?.invoke==='function';
+    if(!hasNativeBridge && !isMobileRuntime()){
+      if(!browserFolderSupported()){
+        toast('This browser does not support direct folder connection. Use Chrome/Edge or the Tauri desktop app.');
+        return false;
+      }
+      try{
+        const handle=await window.showDirectoryPicker({mode:'readwrite'});
+        if(!handle)return false;
+        await saveBrowserFolder(handle);
+        renderSettings();
+        toast(`✓ Computer folder connected: ${handle.name}`);
+        return true;
+      }catch(e){
+        if(e?.name!=='AbortError')toast('Computer folder connection failed: '+(e?.message||'Permission denied'));
+        return false;
+      }
+    }
     if(isMobileRuntime()){
       toast('Mobile: exports save to Downloads or Share. No Windows folder picker is used.');
       return false;
@@ -81,6 +173,43 @@
 
   async function saveComputerForExport(filename,content,mime,subfolder=''){
     if(isMobileRuntime())return saveBlobForMobile(filename,content,mime);
+
+    // Standalone/local HTML preview has no Tauri bridge. Fall back to a normal
+    // browser download instead of failing with a native-bridge error.
+    const hasNativeBridge=typeof window.__TAURI__?.core?.invoke==='function' ||
+      typeof window.__TAURI_INTERNALS__?.invoke==='function';
+    if(!hasNativeBridge){
+      if(browserFolderSupported() && browserDirectoryHandle){
+        try{
+          const blob=content instanceof Blob ? content : new Blob([content],{type:mime||'application/octet-stream'});
+          if(typeof browserDirectoryHandle.requestPermission==='function'){
+            const perm=await browserDirectoryHandle.requestPermission({mode:'readwrite'});
+            if(perm!=='granted')throw new Error('Folder write permission was not granted.');
+          }
+          const fileHandle=await browserDirectoryHandle.getFileHandle(filename,{create:true});
+          const writable=await fileHandle.createWritable();
+          await writable.write(blob);
+          await writable.close();
+          toast(`✓ Saved to connected folder: ${filename}`);
+          return true;
+        }catch(e){
+          console.warn('Browser folder save failed',e);
+          if(/permission|not allowed|denied|invalid state/i.test(e?.message||''))await clearBrowserFolder();
+        }
+      }
+      try{
+        const blob=content instanceof Blob ? content : new Blob([content],{type:mime||'application/octet-stream'});
+        const url=URL.createObjectURL(blob);
+        const a=document.createElement('a'); a.href=url; a.download=filename; a.rel='noopener';
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(()=>URL.revokeObjectURL(url),15000);
+        toast(`✓ Download started: ${filename}`);
+        return true;
+      }catch(e){
+        toast('Browser download failed: '+(e?.message||'Unknown error'));
+        return false;
+      }
+    }
 
     const root=await ensureComputerFolderForExport();
     if(!root)return false;
@@ -112,7 +241,22 @@
   }
 
   loadComputerConnection();
+  loadBrowserFolder().then(()=>{ try{ renderSettings(); }catch(e){} });
+  /* Selection is persisted locally so the next export starts with the user's last chosen menu set. */
 
+  async function backupPayload(){
+    // Native SQLite is lazy-loaded in memory, so a portable JSON backup must
+    // page through the canonical database instead of serializing only the
+    // currently visible UI windows. Older attachment blobs are hydrated page-by-page
+    // during native lazy loads and are included in the record payload.
+    const snapshot=(NATIVE_RUNTIME&&window.omDb?.exportAll)?await window.omDb.exportAll():null;
+    if(snapshot)return {lifeOSBackup:'LifeOS',version:4,exportedAt:new Date().toISOString(),data:snapshot};
+    await hydrateAttachmentsFromIDB(data);
+    return {lifeOSBackup:'LifeOS',version:4,exportedAt:new Date().toISOString(),data:data};
+  }
+  async function backupJson(){return JSON.stringify(await backupPayload(),null,2)}
+  // Keep this callable in browser/local-preview mode as well as Tauri.
+  window.backupJson=backupJson;
   window.exportLifeOSBackup=async function(){
     try{
       const name='LifeOS_Backup_'+today()+'.json',json=await backupJson();
@@ -253,11 +397,15 @@ const t=new Uint32Array(256);for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)
     return [];
   }
   function exportSections(){
-    const ids=['dashboard','mentor','planner','tasks','routine','habits','goals','focus','notes','journal','expenses','personal','professional','spiritual','economical','mental','social','moral','settings'];
+    const ids=allExportMenuIds();
     return ids.map(id=>({id,title:(navItems.find(x=>x[0]===id)?.[1]||id).replace(/^\S+\s/,''),rows:exportSectionRecords(id)}));
   }
-  /* Export only the data that changed since the previous export of the same format.
-     This keeps Word/Excel/PDF compact while the Dashboard/Summary always stays current. */
+  function selectedExportSections(){
+    const selected=new Set(getExportSelection());
+    return exportSections().filter(sec=>selected.has(sec.id));
+  }
+  /* Export the complete current data for the selected menu items and date range.
+     Every export is a fresh report; previous exports never hide unchanged records. */
   function exportStable(v){
     if(v===null||v===undefined)return '';
     if(Array.isArray(v))return '['+v.map(exportStable).sort().join(',')+']';
@@ -268,59 +416,143 @@ const t=new Uint32Array(256);for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)
     return section.id+'::'+exportStable(row);
   }
   const EXPORT_PERIOD_KEY='LifeOS_export_period';
+  const EXPORT_SELECTION_KEY='LifeOS_export_selection_v1';
   function localDateISO(d=new Date()){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
-  function getExportPeriod(){try{return JSON.parse(localStorage.getItem(EXPORT_PERIOD_KEY)||'null')||{mode:'all',from:'',to:''}}catch(e){return {mode:'all',from:'',to:''}}}
-  function setExportPeriod(mode,from='',to=''){const p={mode,from,to};localStorage.setItem(EXPORT_PERIOD_KEY,JSON.stringify(p));const c=document.getElementById('exportCustomDates');if(c)c.style.display=mode==='custom'?'flex':'none';}
+  function allExportMenuIds(){return (Array.isArray(navItems)?navItems:[]).map(x=>String(x?.[0]||'')).filter(Boolean)}
+  function getExportPeriod(){
+    try{
+      const raw=JSON.parse(localStorage.getItem(EXPORT_PERIOD_KEY)||'null');
+      if(raw && typeof raw==='object'){
+        const mode=['all','week','month','year','custom'].includes(raw.mode)?raw.mode:'all';
+        return {mode,from:String(raw.from||''),to:String(raw.to||'')};
+      }
+    }catch(e){}
+    return {mode:'all',from:'',to:''};
+  }
+  function syncExportSelectionUi(){
+    const selected=new Set(getExportSelection());
+    document.querySelectorAll('[data-export-section]').forEach(el=>{el.checked=selected.has(String(el.value||''));});
+    const label=document.getElementById('exportSelectionLabel');
+    if(label)label.textContent=exportSelectionLabel();
+  }
+  function getExportSelection(){
+    const ids=allExportMenuIds();
+    try{
+      const raw=JSON.parse(localStorage.getItem(EXPORT_SELECTION_KEY)||'null');
+      if(Array.isArray(raw))return raw.map(String).filter(id=>ids.includes(id));
+    }catch(e){}
+    if(Array.isArray(window.__lifeosExportSelection))return window.__lifeosExportSelection.map(String).filter(id=>ids.includes(id));
+    return ids;
+  }
+  function setExportSelection(ids){
+    const allowed=new Set(allExportMenuIds());
+    const picked=[...new Set((Array.isArray(ids)?ids:[]).map(String).filter(id=>allowed.has(id)))];
+    window.__lifeosExportSelection=picked;
+    try{localStorage.setItem(EXPORT_SELECTION_KEY,JSON.stringify(picked));}catch(e){console.warn('Export selection persistence unavailable',e)}
+    syncExportSelectionUi();
+  }
+  function exportSelectionLabel(){
+    const selected=getExportSelection(), total=allExportMenuIds().length;
+    return `${selected.length}/${total} menu items selected`;
+  }
+  function isExportSectionSelected(id){return getExportSelection().includes(id)}
+  function toggleExportSection(id,checked){
+    const selected=new Set(getExportSelection());
+    if(checked)selected.add(id);else selected.delete(id);
+    setExportSelection([...selected]);
+  }
+  function selectAllExportSections(){setExportSelection(allExportMenuIds());}
+  function clearExportSections(){setExportSelection([]);}
+  window.changeExportSection=function(id,checked){toggleExportSection(id,!!checked)}
+  window.selectAllExportSections=selectAllExportSections;
+  window.clearExportSections=clearExportSections;
+  window.refreshExportSelection=syncExportSelectionUi;
+  function setExportPeriod(mode,from='',to=''){const p={mode,from,to};try{localStorage.setItem(EXPORT_PERIOD_KEY,JSON.stringify(p))}catch(e){console.warn('Export period persistence unavailable',e)}const c=document.getElementById('exportCustomDates');if(c)c.style.display=mode==='custom'?'flex':'none';}
   function exportPeriodLabel(){const p=getExportPeriod();if(p.mode==='week')return 'This Week';if(p.mode==='month')return 'This Month';if(p.mode==='year')return 'This Year';if(p.mode==='custom'&&p.from&&p.to)return p.from+' → '+p.to;return 'All Data'}
   function exportPeriodBounds(){const p=getExportPeriod(),now=new Date();let from='',to='';if(p.mode==='week'){const d=new Date(now.getFullYear(),now.getMonth(),now.getDate()),day=d.getDay(),diff=day===0?-6:1-day;d.setDate(d.getDate()+diff);from=localDateISO(d);const end=new Date(d.getFullYear(),d.getMonth(),d.getDate()+6);to=localDateISO(end)}else if(p.mode==='month'){from=localDateISO(new Date(now.getFullYear(),now.getMonth(),1));to=localDateISO(new Date(now.getFullYear(),now.getMonth()+1,0))}else if(p.mode==='year'){from=now.getFullYear()+'-01-01';to=now.getFullYear()+'-12-31'}else if(p.mode==='custom'){from=p.from;to=p.to}return {from,to}}
   function dateStringsFromValue(v){const out=[];if(v===null||v===undefined||v==='')return out;if(typeof v==='number'&&v>100000000000){const d=new Date(v);if(!Number.isNaN(d.getTime()))out.push(localDateISO(d));return out}const s=String(v);let m=s.match(/\d{4}[-/]\d{1,2}[-/]\d{1,2}/);if(m){const parts=m[0].split(/[-\/]/);out.push(parts[0]+'-'+String(parts[1]).padStart(2,'0')+'-'+String(parts[2]).padStart(2,'0'))}m=s.match(/\b(\d{1,2})[\/.](\d{1,2})[\/.](\d{4})\b/);if(m)out.push(m[3]+'-'+String(m[2]).padStart(2,'0')+'-'+String(m[1]).padStart(2,'0'));return out}
   function rowDateValues(row){const out=[...(row?.__exportDates||[])];Object.entries(row||{}).forEach(([k,v])=>{if(!/(date|time|created|updated|due|start|end|day|timestamp)/i.test(k))return;(Array.isArray(v)?v:[v]).forEach(x=>out.push(...dateStringsFromValue(x)))});return [...new Set(out.filter(Boolean))]}
-  function filterRowsByExportPeriod(sec){const p=getExportPeriod();if(p.mode==='all')return sec.rows;const b=exportPeriodBounds();if(!b.from||!b.to)return [];if(sec.id==='settings'||sec.id==='device-storage')return [];return sec.rows.filter(row=>{const dates=rowDateValues(row);return dates.length>0&&dates.some(d=>d>=b.from&&d<=b.to)})}
-  function filteredExportSections(){const sections=exportSections().map(sec=>({...sec,rows:filterRowsByExportPeriod(sec)}));if(getExportPeriod().mode!=='all')sections[0].rows=exportPeriodSummary(sections.slice(1));return sections}
+  function filterRowsByExportPeriod(sec){
+    const p=getExportPeriod();if(p.mode==='all')return sec.rows;
+    const b=exportPeriodBounds();if(!b.from||!b.to)return [];
+    return sec.rows.filter(row=>{
+      const dates=rowDateValues(row);
+      /* Metadata/menu selections without record dates remain available so a selected
+         menu never silently disappears from a date-filtered export. */
+      if(!dates.length)return ['settings','device-storage','mentor'].includes(sec.id);
+      return dates.some(d=>d>=b.from&&d<=b.to);
+    });
+  }
+  function filteredExportSections(){
+    const sections=selectedExportSections().map(sec=>({...sec,rows:filterRowsByExportPeriod(sec)}));
+    const dashboard=sections.find(sec=>sec.id==='dashboard');
+    if(dashboard)dashboard.rows=exportPeriodSummary(sections.filter(sec=>sec.id!=='dashboard'));
+    return sections;
+  }
   function exportPeriodSummary(sections){const find=id=>sections.find(s=>s.id===id)?.rows||[];const tasks=find('tasks'),notes=find('notes'),journal=find('journal'),habits=find('habits'),goals=find('goals'),routines=find('routine'),planner=find('planner'),focus=find('focus'),expenses=find('expenses');const expenseRows=expenses.filter(x=>String(x.recordType||'').toLowerCase()!=='income'),incomeRows=expenses.filter(x=>String(x.recordType||'').toLowerCase()==='income');const sum=rows=>rows.reduce((a,x)=>a+Number(x.amount||0),0);return [{Metric:'Tasks',Value:tasks.length,Completed:tasks.filter(x=>String(x.done).toLowerCase()==='true').length},{Metric:'Notes',Value:notes.length},{Metric:'Journal Entries',Value:journal.length},{Metric:'Habits',Value:habits.length},{Metric:'Goals',Value:goals.length},{Metric:'Routines',Value:routines.length},{Metric:'Daily Plans',Value:planner.length},{Metric:'Focus Sessions',Value:focus.length},{Metric:'Expenses Total',Value:sum(expenseRows)},{Metric:'Income Total',Value:sum(incomeRows)},{Metric:'Balance (Income - Expense)',Value:sum(incomeRows)-sum(expenseRows)},...Object.keys(LIFEOS_CATEGORIES||{}).map(id=>({Metric:LIFEOS_CATEGORIES[id][0].replace(/^\S+\s/,''),Value:find(id).length}))]}
   function exportStateKey(format){return KEY+'_export_state_'+format+'_'+exportPeriodLabel().replace(/[^a-z0-9]+/gi,'_')}
   function readExportState(format){try{return JSON.parse(localStorage.getItem(exportStateKey(format))||'null')}catch(e){return null}}
   function writeExportState(format,sections){try{const state={version:3,exportedAt:Date.now(),period:exportPeriodLabel(),sections:{}};sections.forEach(sec=>{state.sections[sec.id]=sec.rows.map(r=>exportRowKey(sec,r))});localStorage.setItem(exportStateKey(format),JSON.stringify(state));return true}catch(e){console.warn('Export state save failed',e);return false}}
-  function exportChangedSections(format){const all=filteredExportSections();
-    /* A selected period is a report request: always export the complete selected range.
-       Incremental changed-only logic applies only to All Data, so Week/Month/Year/Custom
-       reports never lose older entries merely because that format was exported before. */
-    if(getExportPeriod().mode!=='all')return all;
-    const previous=readExportState(format);if(!previous||!previous.sections)return all;const changed=[];all.forEach(sec=>{const old=new Set(previous.sections[sec.id]||[]);changed.push({...sec,rows:sec.rows.filter(r=>!old.has(exportRowKey(sec,r)))});});return changed}
+  function exportChangedSections(format){
+    /* Word/Excel/PDF are user-requested reports: always export the complete data
+       for the selected menu items and selected date range. Never silently downgrade
+       an All Data export to changed-only rows after a previous export. */
+    const all=filteredExportSections();
+    return getExportSelection().length?all:[];
+  }
   function currentExportStateSections(){return filteredExportSections()}
   function commitExportState(format,sections){writeExportState(format,sections)}
   function lifeosTextRows(sections=exportChangedSections('pdf')){
-    const rows=[];
-    sections.forEach(sec=>sec.rows.forEach(r=>rows.push([sec.title,...Object.values(r).map(exportSafeValue)])));
-    if(!rows.length)rows.push(['LifeOS','No new or updated data since the last export','']);
+    const rows=[['ॐ Om-LifeOS — Advanced Export'],['Professional report / form export'],[exportPeriodBounds().from&&exportPeriodBounds().to?`Date Range: ${exportPeriodBounds().from} → ${exportPeriodBounds().to}`:`Date Range: ${exportPeriodLabel()}`],['Exported: '+new Date().toLocaleString()],['']];
+    sections.forEach(sec=>{
+      rows.push([`SECTION: ${sec.title}`]);
+      const rs=sec.rows||[];
+      if(!rs.length){rows.push(['No data recorded in the selected period.'],['']);return;}
+      const hs=[...new Set(rs.flatMap(r=>Object.keys(r||{})))].slice(0,10);
+      if(hs.length)rows.push(hs);
+      rs.slice(0,500).forEach(r=>rows.push(hs.map(h=>exportSafeValue(r?.[h]??''))));
+      if(rs.length>500)rows.push([`Showing first 500 of ${rs.length} selected records.`]);
+      rows.push(['']);
+    });
+    if(rows.length===5)rows.push(['No data recorded in the selected export.']);
     return rows;
   }
   function makeDocxBlob(sections=exportChangedSections('word')){
-    const p=(text,style='Normal')=>`<w:p><w:pPr>${style!=='Normal'?`<w:pStyle w:val="${style}"/>`:''}</w:pPr><w:r><w:t xml:space="preserve">${officeXmlEsc(text)}</w:t></w:r></w:p>`;
-    const heading=(text,level)=>`<w:p><w:pPr><w:pStyle w:val="Heading${level}"/></w:pPr><w:r><w:rPr><w:b/><w:sz w:val="${level===1?28:23}"/></w:rPr><w:t>${officeXmlEsc(text)}</w:t></w:r></w:p>`;
-    const cell=(text,bold=false)=>`<w:tc><w:tcPr><w:tcW w:w="4680" w:type="dxa"/><w:tcBorders><w:top w:val="single" w:sz="4" w:color="D9DEE7"/><w:left w:val="single" w:sz="4" w:color="D9DEE7"/><w:bottom w:val="single" w:sz="4" w:color="D9DEE7"/><w:right w:val="single" w:sz="4" w:color="D9DEE7"/></w:tcBorders></w:tcPr><w:p><w:r>${bold?'<w:rPr><w:b/></w:rPr>':''}<w:t xml:space="preserve">${officeXmlEsc(text)}</w:t></w:r></w:p></w:tc>`;
-    const itemTable=(obj)=>{
-      const entries=Object.entries(obj||{}).filter(([,v])=>String(v||'')!=='');
-      if(!entries.length)return p('No data recorded.');
-      const trs=entries.map(([k,v])=>`<w:tr>${cell(k,true)}${cell(exportSafeValue(v))}</w:tr>`).join('');
-      return `<w:tbl><w:tblPr><w:tblW w:w="9360" w:type="dxa"/><w:tblLayout w:type="fixed"/><w:tblBorders><w:top w:val="single" w:sz="5" w:color="BFC6D1"/><w:left w:val="single" w:sz="5" w:color="BFC6D1"/><w:bottom w:val="single" w:sz="5" w:color="BFC6D1"/><w:right w:val="single" w:sz="5" w:color="BFC6D1"/><w:insideH w:val="single" w:sz="4" w:color="D9DEE7"/></w:tblBorders></w:tblPr>${trs}</w:tbl>`;
+    const p=(text='',bold=false,size=21)=>`<w:p><w:pPr><w:spacing w:after="90"/></w:pPr><w:r><w:rPr>${bold?'<w:b/>':''}<w:sz w:val="${size}"/></w:rPr><w:t xml:space="preserve">${officeXmlEsc(text)}</w:t></w:r></w:p>`;
+    const heading=(text,level=1)=>`<w:p><w:pPr><w:spacing w:before="180" w:after="100"/></w:pPr><w:r><w:rPr><w:b/><w:sz w:val="${level===1?30:24}"/></w:rPr><w:t>${officeXmlEsc(text)}</w:t></w:r></w:p>`;
+    const cell=(text,bold=false,shade='FFFFFF')=>`<w:tc><w:tcPr><w:shd w:fill="${shade}"/><w:tcW w:w="4680" w:type="dxa"/><w:tcBorders><w:top w:val="single" w:sz="5" w:color="D9DEE7"/><w:left w:val="single" w:sz="5" w:color="D9DEE7"/><w:bottom w:val="single" w:sz="5" w:color="D9DEE7"/><w:right w:val="single" w:sz="5" w:color="D9DEE7"/></w:tcBorders></w:tcPr><w:p><w:r>${bold?'<w:rPr><w:b/></w:rPr>':''}<w:t xml:space="preserve">${officeXmlEsc(text)}</w:t></w:r></w:p></w:tc>`;
+    const table=(headers,rows)=>{
+      const hs=headers.length?headers:['Status']; const rs=rows.length?rows:[{Status:'No data recorded in this section.'}];
+      const head=`<w:tr>${hs.map(h=>cell(h,true,'E8ECF4')).join('')}</w:tr>`;
+      const body=rs.map(r=>`<w:tr>${hs.map(h=>cell(exportSafeValue(r?.[h]??''))).join('')}</w:tr>`).join('');
+      return `<w:tbl><w:tblPr><w:tblW w:w="9360" w:type="dxa"/><w:tblLayout w:type="autofit"/><w:tblBorders><w:top w:val="single" w:sz="6" w:color="BFC6D1"/><w:left w:val="single" w:sz="6" w:color="BFC6D1"/><w:bottom w:val="single" w:sz="6" w:color="BFC6D1"/><w:right w:val="single" w:sz="6" w:color="BFC6D1"/><w:insideH w:val="single" w:sz="4" w:color="D9DEE7"/><w:insideV w:val="single" w:sz="4" w:color="D9DEE7"/></w:tblBorders></w:tblPr>${head}${body}</w:tbl>`;
     };
     const periodBounds=exportPeriodBounds();
     const periodText=periodBounds.from&&periodBounds.to ? `Date Range: ${periodBounds.from} → ${periodBounds.to}` : `Date Range: ${exportPeriodLabel()}`;
-    let body=heading('LifeOS — Summary',1)+p(periodText)+p('Exported: '+new Date().toLocaleString());
-    const summary=sections[0].rows; summary.forEach(r=>body+=itemTable(r));
-    sections.slice(1).forEach(sec=>{
+    let body=heading('ॐ Om-LifeOS — Executive Dashboard',1)+p('Advanced export-ready report • AD + BS • Actual selected LifeOS data',false,22)+p(periodText)+p('Exported: '+new Date().toLocaleString());
+    const summary=sections.find(sec=>sec.id==='dashboard');
+    if(summary){
+      body+=heading('Executive KPI Summary',1);
+      const kpis=summary.rows.slice(0,4).map(r=>({Metric:r.Metric||'',Value:r.Value??'',Completed:r.Completed??''}));
+      if(kpis.length)body+=table(['KPI','Value','Status / Completed'],kpis);
+      body+=p('');
+      body+=table(['Metric','Value','Completed'],summary.rows.map(r=>({Metric:r.Metric||r.Report||'',Value:r.Value??r.DateRange??'',Completed:r.Completed??''})));
+    }
+    sections.filter(sec=>sec.id!=='dashboard').forEach(sec=>{
       body+=heading(sec.title,1);
-      if(!sec.rows.length){body+=p('No data recorded in this section.');return;}
-      sec.rows.forEach((r,i)=>{if(sec.rows.length>1)body+=heading((r.title||r.name||r.Metric||`Entry ${i+1}`),2);body+=itemTable(r);});
+      const rows=sec.rows||[];
+      if(!rows.length){body+=p('No data recorded in the selected period.');return;}
+      const headers=[...new Set(rows.flatMap(r=>Object.keys(r||{})))].slice(0,12);
+      body+=table(headers,rows.slice(0,500));
+      if(rows.length>500)body+=p(`Showing first 500 rows of ${rows.length} selected records.`);
     });
     const files=[
       {name:'[Content_Types].xml',data:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/><Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/></Types>`},
-      {name:'_rels/.rels',data:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/></Relationships>`},
+      {name:'_rels/.rels',data:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/></Relationships>`},
       {name:'word/_rels/document.xml.rels',data:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`},
-      {name:'word/document.xml',data:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${body}<w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="720" w:right="720" w:bottom="720" w:left="720"/></w:sectPr></w:body></w:document>`},
-      {name:'word/styles.xml',data:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:rPr><w:rFonts w:ascii="Aptos" w:hAnsi="Aptos"/><w:sz w:val="21"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:basedOn w:val="Normal"/><w:rPr><w:b/><w:sz w:val="28"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Heading2"><w:name w:val="heading 2"/><w:basedOn w:val="Normal"/><w:rPr><w:b/><w:sz w:val="23"/></w:rPr></w:style></w:styles>`},
-      {name:'docProps/core.xml',data:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties"><dc:title xmlns:dc="http://purl.org/dc/elements/1.1/">LifeOS — Summary and Sections</dc:title><dc:creator xmlns:dc="http://purl.org/dc/elements/1.1/">LifeOS</dc:creator></cp:coreProperties>`}
+      {name:'word/document.xml',data:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${body}<w:sectPr><w:pgSz w:w="15840" w:h="12240"/><w:pgMar w:top="720" w:right="720" w:bottom="720" w:left="720"/></w:sectPr></w:body></w:document>`},
+      {name:'word/styles.xml',data:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:rPr><w:rFonts w:ascii="Aptos" w:hAnsi="Aptos"/><w:sz w:val="21"/></w:rPr></w:style></w:styles>`},
+      {name:'docProps/core.xml',data:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties"><dc:title xmlns:dc="http://purl.org/dc/elements/1.1/">Om-LifeOS Advanced Export</dc:title><dc:creator xmlns:dc="http://purl.org/dc/elements/1.1/">Om-LifeOS</dc:creator></cp:coreProperties>`}
     ];
     return zipStore(files);
   }
@@ -329,23 +561,34 @@ const t=new Uint32Array(256);for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)
     const sheetName=(title)=>{let n=String(title||'Sheet').replace(/[\\\/?*\[\]:]/g,' ').trim().slice(0,31)||'Sheet';let b=n,i=2;while(used.has(n)){n=(b.slice(0,28)+' '+i++).slice(0,31)}used.add(n);return n};
     const escCell=v=>officeXmlEsc(exportSafeValue(v));
     const colRef=ci=>{let n=ci+1,s='';while(n){const r=(n-1)%26;s=String.fromCharCode(65+r)+s;n=Math.floor((n-1)/26)}return s};
-    const sheetXml=(sec)=>{
-      const rows=sec.rows.length?sec.rows:[];
-      const headers=[...new Set(rows.flatMap(r=>Object.keys(r||{})))];
-      const finalHeaders=headers.length?headers:['Status'];
-      const dataRows=rows.length?rows:[{Status:'No data recorded in this section.'}];
-      const cells=[`<row r="1">${finalHeaders.map((h,ci)=>`<c r="${colRef(ci)}1" s="1" t="inlineStr"><is><t>${escCell(h)}</t></is></c>`).join('')}</row>`];
-      dataRows.forEach((r,ri)=>{const rr=ri+2;cells.push(`<row r="${rr}">${finalHeaders.map((h,ci)=>{const col=colRef(ci);return `<c r="${col}${rr}" s="2" t="inlineStr"><is><t>${escCell(r?.[h])}</t></is></c>`}).join('')}</row>`)});
-      const lastCol=colRef(finalHeaders.length-1);
-      return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetViews><sheetView workbookViewId="0"/></sheetViews><sheetFormatPr defaultRowHeight="20"/><cols>${finalHeaders.map((_,i)=>`<col min="${i+1}" max="${i+1}" width="24" customWidth="1"/>`).join('')}</cols><sheetData>${cells.join('')}</sheetData><autoFilter ref="A1:${lastCol}${dataRows.length+1}"/><pageMargins left="0.3" right="0.3" top="0.5" bottom="0.5" header="0.2" footer="0.2"/><pageSetup orientation="landscape" fitToWidth="1" fitToHeight="0" paperSize="9"/><pageSetUpPr fitToPage="1"/></worksheet>`;
+    const rowsFor=(sec)=>sec.rows.length?sec.rows:[{Status:'No data recorded in the selected period.'}];
+    const sheetXml=(sec,kind='normal')=>{
+      const rows=rowsFor(sec), headers=[...new Set(rows.flatMap(r=>Object.keys(r||{})))].slice(0,20); const hs=headers.length?headers:['Status'];
+      const title=sec.title||'LifeOS';
+      const cells=[];
+      const isDash=sec.id==='dashboard';
+      cells.push(`<row r="1" ht="34" customHeight="1"><c r="A1" s="3" t="inlineStr"><is><t>${escCell(isDash?'Om-LifeOS Executive Dashboard':title)}</t></is></c></row>`);
+      cells.push(`<row r="2"><c r="A2" s="4" t="inlineStr"><is><t>${escCell('Advanced export-ready report • AD + BS • '+periodText)}</t></is></c></row>`);
+      cells.push(`<row r="3"><c r="A3" s="4" t="inlineStr"><is><t>${escCell('Exported: '+new Date().toLocaleString())}</t></is></c></row>`);
+      let tableStart=5;
+      if(isDash){
+        const cards=rows.slice(0,4);
+        cards.forEach((r,i)=>{const c=i*2;cells.push(`<row r="4"><c r="${colRef(c)}4" s="1" t="inlineStr"><is><t>${escCell(r.Metric||'KPI')}</t></is></c><c r="${colRef(c+1)}4" s="1" t="inlineStr"><is><t>${escCell(r.Completed!==undefined?String(r.Value??'')+' / '+String(r.Completed):r.Value??'')}</t></is></c></row>`)});
+        tableStart=7;
+      }
+      cells.push(`<row r="${tableStart}">${hs.map((h,ci)=>`<c r="${colRef(ci)}${tableStart}" s="1" t="inlineStr"><is><t>${escCell(h)}</t></is></c>`).join('')}</row>`);
+      rows.slice(0,2000).forEach((r,ri)=>{const rr=ri+tableStart+1;cells.push(`<row r="${rr}">${hs.map((h,ci)=>`<c r="${colRef(ci)}${rr}" s="2" t="inlineStr"><is><t>${escCell(r?.[h])}</t></is></c>`).join('')}</row>`)});
+      const lastCol=colRef(hs.length-1), lastRow=Math.max(tableStart+1,rows.length+tableStart);
+      const widths=Array.from({length:Math.max(hs.length,isDash?8:1)},(_,i)=>`<col min="${i+1}" max="${i+1}" width="${i===0?24:22}" customWidth="1"/>`).join('');
+      const merges=isDash?'<mergeCells count="1"><mergeCell ref="A1:H1"/></mergeCells>':'';
+      return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetViews><sheetView showGridLines="0" workbookViewId="0"/></sheetViews><sheetFormatPr defaultRowHeight="20"/><cols>${widths}</cols><sheetData>${cells.join('')}</sheetData>${merges}<autoFilter ref="A${tableStart}:${lastCol}${lastRow}"/><freezePane ySplit="${tableStart}" topLeftCell="A${tableStart+1}" activePane="bottomLeft" state="frozen"/><pageMargins left="0.3" right="0.3" top="0.5" bottom="0.5" header="0.2" footer="0.2"/><pageSetup orientation="landscape" fitToWidth="1" fitToHeight="0" paperSize="9"/><pageSetUpPr fitToPage="1"/></worksheet>`;
     };
     const periodBounds=exportPeriodBounds();
     const periodText=periodBounds.from&&periodBounds.to ? `Date Range: ${periodBounds.from} → ${periodBounds.to}` : `Date Range: ${exportPeriodLabel()}`;
-    /* Put the selected export period visibly into the Summary sheet without changing the other section tabs. */
-    if(sections.length){
-      sections[0]={...sections[0],rows:[{Report:'LifeOS Export',DateRange:periodText,Exported:new Date().toLocaleString()},...sections[0].rows]};
-    }
-    const sheets=sections.map((sec,i)=>({name:sheetName(sec.title),xml:sheetXml(sec),id:i+1}));
+    const sectionsCopy=sections.map(s=>({...s,rows:Array.isArray(s.rows)?s.rows.slice():[]}));
+    const dashboard=sectionsCopy.find(s=>s.id==='dashboard');
+    if(dashboard)dashboard.rows=exportPeriodSummary(sectionsCopy.filter(s=>s.id!=='dashboard'));
+    const sheets=sectionsCopy.map((sec,i)=>({name:sheetName(sec.title),xml:sheetXml(sec),id:i+1}));
     const workbookSheets=sheets.map(s=>`<sheet name="${officeXmlEsc(s.name)}" sheetId="${s.id}" r:id="rId${s.id}"/>`).join('');
     const rels=sheets.map(s=>`<Relationship Id="rId${s.id}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${s.id}.xml"/>`).join('')+`<Relationship Id="rId${sheets.length+1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>`;
     const contentOverrides=sheets.map(s=>`<Override PartName="/xl/worksheets/sheet${s.id}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`).join('');
@@ -353,8 +596,8 @@ const t=new Uint32Array(256);for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)
       {name:'[Content_Types].xml',data:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>${contentOverrides}</Types>`},
       {name:'_rels/.rels',data:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>`},
       {name:'xl/_rels/workbook.xml.rels',data:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${rels}</Relationships>`},
-      {name:'xl/workbook.xml',data:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>${workbookSheets}</sheets></workbook>`},
-      {name:'xl/styles.xml',data:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="2"><font><sz val="11"/><name val="Aptos"/></font><font><b/><sz val="11"/><name val="Aptos"/></font></fonts><fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="E8ECF4"/><bgColor indexed="64"/></patternFill></fill></fills><borders count="2"><border/><border><left style="thin"/><right style="thin"/><top style="thin"/><bottom style="thin"/></border></borders><cellXfs count="3"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/><xf numFmtId="0" fontId="1" fillId="2" borderId="1" applyAlignment="1"><alignment vertical="top" wrapText="1"/></xf><xf numFmtId="0" fontId="0" fillId="0" borderId="1" applyAlignment="1"><alignment vertical="top" wrapText="1"/></xf></cellXfs></styleSheet>`},
+      {name:'xl/workbook.xml',data:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><bookViews><workbookView showSheetTabs="1"/></bookViews><sheets>${workbookSheets}</sheets></workbook>`},
+      {name:'xl/styles.xml',data:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="3"><font><sz val="11"/><name val="Aptos"/></font><font><b/><sz val="11"/><name val="Aptos"/></font><font><b/><sz val="18"/><name val="Aptos Display"/></font></fonts><fills count="4"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="E8ECF4"/><bgColor indexed="64"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="DCE6F1"/><bgColor indexed="64"/></patternFill></fill></fills><borders count="2"><border/><border><left style="thin"/><right style="thin"/><top style="thin"/><bottom style="thin"/></border></borders><cellXfs count="5"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/><xf numFmtId="0" fontId="1" fillId="2" borderId="1" applyAlignment="1"><alignment vertical="center" wrapText="1"/></xf><xf numFmtId="0" fontId="0" fillId="0" borderId="1" applyAlignment="1"><alignment vertical="top" wrapText="1"/></xf><xf numFmtId="0" fontId="2" fillId="3" borderId="1" applyAlignment="1"><alignment vertical="center"/></xf><xf numFmtId="0" fontId="0" fillId="3" borderId="0" applyAlignment="1"><alignment vertical="center"/></xf></cellXfs></styleSheet>`},
       ...sheets.map(s=>({name:`xl/worksheets/sheet${s.id}.xml`,data:s.xml}))
     ];
     return zipStore(files);
@@ -379,7 +622,7 @@ const t=new Uint32Array(256);for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)
       const sections=exportChangedSections('word');
       const blob=makeDocxBlob(sections);
       const ok=await saveComputerForExport(name,blob,'application/vnd.openxmlformats-officedocument.wordprocessingml.document','Word');
-      if(ok){commitExportState('word',currentExportStateSections());toast('✓ Word में सिर्फ नया/updated data saved');}
+      if(ok){commitExportState('word',currentExportStateSections());toast('✓ Word exported: selected menu + date range');}
     }catch(e){console.error(e);toast('Word export failed: '+(e?.message||'Unknown error'))}
   };
   window.exportLifeOSExcel=async function(){
@@ -388,7 +631,7 @@ const t=new Uint32Array(256);for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)
       const sections=exportChangedSections('excel');
       const blob=makeXlsxBlob(sections);
       const ok=await saveComputerForExport(name,blob,'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet','Excel');
-      if(ok){commitExportState('excel',currentExportStateSections());toast('✓ Excel में सिर्फ नया/updated data saved');}
+      if(ok){commitExportState('excel',currentExportStateSections());toast('✓ Excel exported: selected menu + date range');}
     }catch(e){console.error(e);toast('Excel export failed: '+(e?.message||'Unknown error'))}
   };
   function pdfTextLines(sections=exportChangedSections('pdf')){
@@ -428,18 +671,18 @@ const t=new Uint32Array(256);for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)
     pages.forEach((page,pageIndex)=>{
       const c=document.createElement('canvas');c.width=W;c.height=H;const ctx=c.getContext('2d');
       ctx.fillStyle='#fff';ctx.fillRect(0,0,W,H);ctx.fillStyle='#1b2330';
-      ctx.font='bold 30px '+font;ctx.fillText('LifeOS Backup',margin,margin+10);
+      ctx.font='bold 30px '+font;ctx.fillText('ॐ Om-LifeOS — Advanced Export',margin,margin+10);
       ctx.font='16px '+font;ctx.fillStyle='#667085';ctx.fillText('Date Range: '+(exportPeriodBounds().from&&exportPeriodBounds().to?exportPeriodBounds().from+' → '+exportPeriodBounds().to:exportPeriodLabel()),margin,margin+42);
       ctx.fillText('Exported: '+new Date().toLocaleString(),margin,margin+64);
       ctx.strokeStyle='#d9dee7';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(margin,margin+86);ctx.lineTo(W-margin,margin+86);ctx.stroke();
       let y=margin+headerH+5;
       page.forEach((item,i)=>{
-        const isHeader=pageIndex===0&&i===0&&item.raw==='LifeOS Backup';
+        const isHeader=pageIndex===0&&i===0&&String(item.raw||'').startsWith('ॐ Om-LifeOS');
         ctx.font=(isHeader?'bold ':'')+'18px '+font;ctx.fillStyle='#1b2330';
         item.wrapped.forEach(line=>{ctx.fillText(line,margin,y);y+=lineH;}); y+=10;
       });
       ctx.strokeStyle='#d9dee7';ctx.beginPath();ctx.moveTo(margin,H-margin-footerH+10);ctx.lineTo(W-margin,H-margin-footerH+10);ctx.stroke();
-      ctx.font='14px '+font;ctx.fillStyle='#667085';ctx.fillText('LifeOS • Standard A4',margin,H-margin-5);
+      ctx.font='14px '+font;ctx.fillStyle='#667085';ctx.fillText('Om-LifeOS • Advanced A4 Report',margin,H-margin-5);
       const pg='Page '+(pageIndex+1)+' of '+pages.length;ctx.fillText(pg,W-margin-ctx.measureText(pg).width,H-margin-5);
       images.push(c.toDataURL('image/jpeg',0.92).split(',')[1]);
     });
@@ -467,9 +710,10 @@ const t=new Uint32Array(256);for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)
     try{
       const name='LifeOS_Backup_'+today()+'.pdf';
       const sections=exportChangedSections('pdf');
+      if(!sections.length){toast('Please select at least one menu item for PDF export');return;}
       const blob=makePdfBlob(sections);
       const ok=await saveComputerForExport(name,blob,'application/pdf','PDF');
-      if(ok){commitExportState('pdf',currentExportStateSections());toast('✓ PDF में सिर्फ नया/updated data saved');}
+      if(ok){commitExportState('pdf',currentExportStateSections());toast('✓ PDF exported: selected menu + date range');}
     }catch(e){console.error(e);toast('PDF export failed: '+(e?.message||'Unknown error'))}
   };
   /* Universal document/data importer: Excel (.xlsx/.xls), Word (.docx/.doc) and PDF.

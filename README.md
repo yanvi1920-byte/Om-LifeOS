@@ -1,4 +1,4 @@
-# Om-LifeOS v1.7.1
+# Om-LifeOS v1.8.9
 
 Fresh Windows/Tauri source build focused on long-life local storage, bounded rendering and smooth large-data use.
 
