@@ -21,10 +21,34 @@ struct DbStats {
     schema_version: i64,
 }
 
+fn db_config_path(app: &AppHandle) -> Result<PathBuf, String> {
+    let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    Ok(dir.join("database-location.json"))
+}
+
 fn db_path(app: &AppHandle) -> Result<PathBuf, String> {
+    let config = db_config_path(app)?;
+    if config.is_file() {
+        if let Ok(raw) = fs::read_to_string(&config) {
+            if let Ok(folder) = serde_json::from_str::<String>(&raw) {
+                let root = PathBuf::from(folder);
+                if root.is_dir() {
+                    return Ok(root.join("om-lifeos.sqlite3"));
+                }
+            }
+        }
+    }
     let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
     fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     Ok(dir.join("om-lifeos.sqlite3"))
+}
+
+fn set_db_folder(app: &AppHandle, folder: &Path) -> Result<(), String> {
+    if !folder.is_dir() { return Err("Selected database folder does not exist.".into()); }
+    let config = db_config_path(app)?;
+    let raw = serde_json::to_string(&folder.to_string_lossy().into_owned()).map_err(|e| e.to_string())?;
+    fs::write(config, raw).map_err(|e| e.to_string())
 }
 
 fn configure(conn: &Connection) -> Result<(), String> {
@@ -177,8 +201,8 @@ fn db_backup_to(app: AppHandle, target: String) -> Result<String, String> {
 
 #[tauri::command]
 fn db_auto_backup(app: AppHandle, state: State<'_, DbState>) -> Result<String, String> {
-    let root = app.path().document_dir().map_err(|e| e.to_string())?;
-    let dir = root.join("Om-LifeOS").join("DatabaseBackups");
+    let database_root = db_path(&app)?.parent().map(PathBuf::from).ok_or_else(|| "Database folder unavailable.".to_string())?;
+    let dir = database_root.join("DatabaseBackups");
     fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
 
     // Do not copy anything when no data changed since the last automatic snapshot.
@@ -443,6 +467,50 @@ fn db_restore_from_backup(app: AppHandle, state: State<'_, DbState>, backup: Str
 
 
 #[tauri::command]
+#[derive(Debug, Serialize)]
+struct DatabaseFolderResult {
+    folder: String,
+    database: String,
+    migrated: bool,
+    restart_required: bool,
+}
+
+#[tauri::command]
+fn choose_database_folder(app: AppHandle) -> Result<Option<DatabaseFolderResult>, String> {
+    #[cfg(windows)]
+    {
+        let current = db_path(&app)?;
+        let default_dir = current.parent().filter(|p| p.is_dir()).map(PathBuf::from);
+        let mut dialog = rfd::FileDialog::new().set_title("Choose LifeOS long-life database folder");
+        if let Some(dir) = default_dir.as_ref() { dialog = dialog.set_directory(dir); }
+        let Some(folder) = dialog.pick_folder() else { return Ok(None); };
+        let target = folder.join("om-lifeos.sqlite3");
+        let same = current == target;
+        if !same && target.exists() {
+            return Err("Selected folder already contains om-lifeos.sqlite3. Choose an empty LifeOS folder to avoid overwriting another database.".into());
+        }
+        if !same && current.is_file() {
+            online_backup(&app, &target)?;
+        } else if !target.exists() {
+            let conn = Connection::open(&target).map_err(|e| e.to_string())?;
+            configure(&conn)?;
+            migrate(&conn)?;
+        }
+        set_db_folder(&app, &folder)?;
+        Ok(Some(DatabaseFolderResult {
+            folder: folder.to_string_lossy().into_owned(),
+            database: target.to_string_lossy().into_owned(),
+            migrated: !same,
+            restart_required: !same,
+        }))
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = app;
+        Err("Native database folder picker is currently available on Windows.".into())
+    }
+}
+
 fn choose_export_directory() -> Result<Option<String>, String> {
     #[cfg(windows)]
     {
@@ -515,7 +583,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             db_init, db_total_count, db_upsert_record, db_upsert_records, db_delete_record, db_delete_records, db_backup_to, db_auto_backup, db_list_records, db_list_record_ids,
             db_count_records, db_search_records, db_finance_summary, db_get_record, db_set_meta, db_get_meta, db_get_meta_stamp,
-            db_checkpoint, db_integrity_check, choose_database_backup, db_restore_from_backup, choose_export_directory, save_export_file
+            db_checkpoint, db_integrity_check, choose_database_backup, choose_database_folder, db_restore_from_backup, choose_export_directory, save_export_file
         ])
         .run(tauri::generate_context!())
         .expect("error while running ॐ");

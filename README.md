@@ -1,29 +1,21 @@
-# Om-LifeOS v1.8.13 — Accessibility Clean
+# Om-LifeOS v1.8.25 — Final Fresh Build
 
-Fresh clean build based on the deep-audited v1.8.13 project.
+Windows/GitHub/Tauri local-first LifeOS build.
 
-## Final hardening
-- Generated form controls receive stable `id` and `name` attributes.
-- Controls receive an accessible name when one was missing.
-- Sibling text labels are automatically associated with their control.
-- A MutationObserver covers dynamically rendered menus, calculator tools, modals and import dialogs.
-- Existing calculator, finance, import/export, Life Balance and Tauri source structure is preserved.
+## Export behavior
+- Word / Excel / PDF export only the user-selected menus and selected date range.
+- First successful export creates a baseline. Later exports contain only records changed/created after the previous successful export for that format + period.
+- Unchanged records are not repeated.
+- JSON Full Backup remains a separate full-backup operation.
+- Exported `updatedAt` is internal metadata and is not added as an extra visible column.
 
-## Verification
-- JavaScript syntax checked.
-- ZIP integrity checked.
-- `src/index.html` is byte-identical to the standalone HTML in the release.
+## Long-life storage
+- Windows/Tauri uses SQLite as the canonical store.
+- SQLite is configured with WAL, NORMAL synchronous mode, busy timeout, indexes and lazy/cursor loading.
+- Browser fallback uses IndexedDB/localStorage.
 
-
-## v1.8.14 storage/export fix
-- Export menu selection is now genuinely user-controlled (Select All / Clear All / individual checkboxes).
-- Life Balance and Universal Calculator are included in section selection/export.
-- Browser/local HTML mode now has a working JSON backup/restore fallback instead of a native-SQLite-only warning.
-- Browser database status reports IndexedDB health accurately.
-
-
-## v1.8.20 Daily Planner Fix
-- Point-wise actions are visible in the main Daily Planner card.
-- Save Plan performs an immediate daily-section persistence attempt.
-- Add/complete/delete point actions persist immediately.
-- Native SQLite daily section and browser fallback are both handled.
+## Build
+```bash
+npm install
+npm run tauri build
+```

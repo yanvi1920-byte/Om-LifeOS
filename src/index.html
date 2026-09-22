@@ -331,7 +331,7 @@ html[data-lifeos-mode="dark"] .mobile-bottom-nav button.active{background:#28244
 @media(max-width:850px){.calc-grid{grid-template-columns:1fr}.calc-home-cards{grid-template-columns:repeat(2,minmax(0,1fr))}.calc-form{grid-template-columns:1fr}.calc-mini-grid{grid-template-columns:1fr 1fr}}
 @media(max-width:520px){.calc-home-cards{grid-template-columns:1fr}.calc-mini-grid{grid-template-columns:1fr}.calc-hero h2{font-size:23px}}
 </style>
-<title>Om-LifeOS v1.8.14 — Deep Audited Final</title>
+<title>Om-LifeOS v1.8.25 — Final Fresh Build</title>
 <style>
 .mentor-rules-editor{display:grid;gap:6px}.mentor-rule-row{display:grid;grid-template-columns:auto 1fr auto;gap:6px;align-items:center;padding:5px 0}.mentor-rule-input{min-height:42px;height:42px;padding:7px 9px}.mentor-quotes-card .item{padding:8px}.menu-import-actions{display:flex;gap:7px;flex-wrap:wrap}.menu-import-bar{gap:10px}.life-balance-card{margin-bottom:12px}
 </style>
@@ -541,7 +541,7 @@ body[data-lifeos-mode="dark"] #calculator .calc-result{
 }
 body[data-lifeos-mode="dark"] #calculator .calc-result{background:#18212d!important}
 </style>
-<meta name="lifeos-import-fix" content="v1.8.18 canonical-date-period-fix"><meta name="lifeos-import-note" content="Excel date serials and regional date formats normalize to YYYY-MM-DD; finance periods reload native data by selected period."></head><body><noscript>JavaScript is required for LifeOS.</noscript><div class="mobile-app-bar" id="mobileAppBar"><button aria-controls="mobileNavDrawer" aria-expanded="false" aria-label="Open navigation" id="mobileMenuButton" onclick="window.toggleMobileNav()" type="button">☰</button><div aria-hidden="true" class="mobile-brand-logo">ॐ</div><b class="mobile-brand-name">Om-LifeOS</b><span id="mobilePageTitle">Dashboard</span></div><div class="mobile-nav-backdrop" id="mobileNavBackdrop" onclick="window.toggleMobileNav(false)"></div><div class="app"><aside class="side" id="mobileNavDrawer"><div class="sidebar-top-tools"><button aria-label="Toggle theme" class="sidebar-theme-toggle" id="sidebarThemeToggle" onclick="toggleAppearance()" type="button">🌙</button></div><div class="brand"><div aria-hidden="true" class="brand-logo">ॐ</div><div><b>Om-LifeOS</b><small>Personal life management</small></div></div><nav aria-label="LifeOS navigation" id="nav"><button id="nav-dashboard" onclick="show('dashboard')" type="button">🏠 Dashboard</button><button id="nav-mentor" onclick="show('mentor')" type="button">🧭 Mentor &amp; Capital</button><button id="nav-planner" onclick="show('planner')" type="button">📅 Daily Planner</button><button id="nav-tasks" onclick="show('tasks')" type="button">✅ To-Do &amp; Projects</button><button id="nav-routine" onclick="show('routine')" type="button">🕉 Routine Planner</button><button id="nav-habits" onclick="show('habits')" type="button">🧘 Habits</button><button id="nav-goals" onclick="show('goals')" type="button">🎯 Goals</button><button id="nav-focus" onclick="show('focus')" type="button">⏱ Focus</button><button id="nav-notes" onclick="show('notes')" type="button">📝 Notes</button><button id="nav-journal" onclick="show('journal')" type="button">📔 Daily Journal</button><button id="nav-expenses" onclick="show('expenses')" type="button">💰 Expenses &amp; Income</button><button id="nav-personal" onclick="show('personal')" type="button">👤 Personal</button><button id="nav-professional" onclick="show('professional')" type="button">💼 Professional</button><button id="nav-spiritual" onclick="show('spiritual')" type="button">🕉 Spiritual</button><button id="nav-economical" onclick="show('economical')" type="button">💰 Economical</button><button id="nav-mental" onclick="show('mental')" type="button">🧠 Mental</button><button id="nav-social" onclick="show('social')" type="button">🤝 Social</button><button id="nav-moral" onclick="show('moral')" type="button">⚖️ Moral</button><button id="nav-device-storage" onclick="show('device-storage')" type="button">💾 Device Storage</button><button id="nav-settings" onclick="show('settings')" type="button">⚙️ Settings</button></nav></aside><main class="main"><header class="top"><div><h1 id="pageTitle">Dashboard</h1><div class="sub">Your daily system — simple, fast and mobile friendly.</div></div><div class="date-panel top-date-dual"><label><span class="label">AD</span><input aria-label="Today (AD)" class="date" id="today" onchange="syncBsFromAd();render()" oninput="syncBsFromAd()" type="date"/></label><label><span class="label">BS</span><input aria-label="Today (BS)" class="date" id="todayBs" inputmode="numeric" onchange="syncTodayFromBs()" onkeydown="if(event.key==='Enter'){event.preventDefault();syncTodayFromBs()}" placeholder="YYYY-MM-DD" type="text"/></label></div></header><section aria-labelledby="pageTitle" class="section active" id="dashboard"><div id="lifeosStaticFallback" style="padding:18px"><div class="module-hero"><div class="eyebrow" style="color:#d8ccff">OM-LIFEOS</div><h2 style="color:#fff;font-size:24px;margin:6px 0">Life Management Dashboard</h2><p style="color:#e5e7eb;margin:0">Local check mode is loaded. If JavaScript is enabled, the full interactive dashboard will initialize automatically.</p></div><div class="grid g3"><div class="card"><h3>📊 Dashboard</h3><p class="muted">Overview, KPIs, AD + BS date and quick actions.</p></div><div class="card"><h3>📅 Planner & Tasks</h3><p class="muted">Daily planner, tasks, routines, habits, goals and focus.</p></div><div class="card"><h3>📝 Notes & Journal</h3><p class="muted">Notes, daily journal, attachments and rich text.</p></div><div class="card"><h3>💰 Finance</h3><p class="muted">Income, expenses, finance tracking and currency.</p></div><div class="card"><h3>🧭 Life Areas</h3><p class="muted">Personal, Professional, Spiritual, Economical, Mental, Social and Moral.</p></div><div class="card"><h3>💾 Backup & Export</h3><p class="muted">JSON backup plus selected menu + date-range Word, Excel and PDF export.</p></div></div><div class="card" style="margin-top:10px"><h3>Local test status</h3><p class="muted">This static screen prevents a blank page when a file preview does not execute JavaScript. Open the downloaded HTML directly in Chrome/Edge for full interaction.</p></div></div></section><section aria-labelledby="pageTitle" class="section" id="mentor"></section><section aria-labelledby="pageTitle" class="section" id="planner"></section><section aria-labelledby="pageTitle" class="section" id="tasks"></section><section aria-labelledby="pageTitle" class="section" id="routine"></section><section aria-labelledby="pageTitle" class="section" id="habits"></section><section aria-labelledby="pageTitle" class="section" id="goals"></section><section aria-labelledby="pageTitle" class="section" id="focus"></section><section aria-labelledby="pageTitle" class="section" id="notes"></section><section aria-labelledby="pageTitle" class="section" id="journal"></section><section aria-labelledby="pageTitle" class="section" id="expenses"></section><section aria-labelledby="pageTitle" class="section" id="personal"></section><section aria-labelledby="pageTitle" class="section" id="professional"></section><section aria-labelledby="pageTitle" class="section" id="spiritual"></section><section aria-labelledby="pageTitle" class="section" id="economical"></section><section aria-labelledby="pageTitle" class="section" id="mental"></section><section aria-labelledby="pageTitle" class="section" id="social"></section><section aria-labelledby="pageTitle" class="section" id="moral"></section><section aria-labelledby="pageTitle" class="section" id="life-balance"></section><section aria-labelledby="pageTitle" class="section" id="calculator"></section><section aria-labelledby="pageTitle" class="section" id="device-storage"></section><section aria-labelledby="pageTitle" class="section" id="settings"></section></main></div><div aria-label="Quick navigation" class="mobile-bottom-nav" id="mobileBottomNav"><button data-section="dashboard" onclick="show('dashboard')" type="button"><span class="mi">⌂</span><span>Home</span></button><button data-section="planner" onclick="show('planner')" type="button"><span class="mi">▦</span><span>Plan</span></button><button data-section="tasks" onclick="show('tasks')" type="button"><span class="mi">✓</span><span>Tasks</span></button><button data-section="habits" onclick="show('habits')" type="button"><span class="mi">◉</span><span>Habits</span></button><button data-section="notes" onclick="show('notes')" type="button"><span class="mi">▤</span><span>Notes</span></button><button data-section="settings" onclick="show('settings')" type="button"><span class="mi">⚙</span><span>More</span></button><button aria-label="Toggle theme" class="bottom-theme" onclick="toggleAppearance()" type="button">☾</button></div><div class="toast" id="toast"></div><div id="bsCalendarModal" onclick="if(event.target===this)closeBsCalendar()"></div>
+<meta name="lifeos-import-fix" content="v1.8.25 final-updated-export-fix"><meta name="lifeos-import-note" content="Excel date serials and regional date formats normalize to YYYY-MM-DD; finance periods reload native data by selected period."></head><body><noscript>JavaScript is required for LifeOS.</noscript><div class="mobile-app-bar" id="mobileAppBar"><button aria-controls="mobileNavDrawer" aria-expanded="false" aria-label="Open navigation" id="mobileMenuButton" onclick="window.toggleMobileNav()" type="button">☰</button><div aria-hidden="true" class="mobile-brand-logo">ॐ</div><b class="mobile-brand-name">Om-LifeOS</b><span id="mobilePageTitle">Dashboard</span></div><div class="mobile-nav-backdrop" id="mobileNavBackdrop" onclick="window.toggleMobileNav(false)"></div><div class="app"><aside class="side" id="mobileNavDrawer"><div class="sidebar-top-tools"><button aria-label="Toggle theme" class="sidebar-theme-toggle" id="sidebarThemeToggle" onclick="toggleAppearance()" type="button">🌙</button></div><div class="brand"><div aria-hidden="true" class="brand-logo">ॐ</div><div><b>Om-LifeOS</b><small>Personal life management</small></div></div><nav aria-label="LifeOS navigation" id="nav"><button id="nav-dashboard" onclick="show('dashboard')" type="button">🏠 Dashboard</button><button id="nav-mentor" onclick="show('mentor')" type="button">🧭 Mentor &amp; Capital</button><button id="nav-planner" onclick="show('planner')" type="button">📅 Daily Planner</button><button id="nav-tasks" onclick="show('tasks')" type="button">✅ To-Do &amp; Projects</button><button id="nav-routine" onclick="show('routine')" type="button">🕉 Routine Planner</button><button id="nav-habits" onclick="show('habits')" type="button">🧘 Habits</button><button id="nav-goals" onclick="show('goals')" type="button">🎯 Goals</button><button id="nav-focus" onclick="show('focus')" type="button">⏱ Focus</button><button id="nav-notes" onclick="show('notes')" type="button">📝 Notes</button><button id="nav-journal" onclick="show('journal')" type="button">📔 Daily Journal</button><button id="nav-expenses" onclick="show('expenses')" type="button">💰 Expenses &amp; Income</button><button id="nav-personal" onclick="show('personal')" type="button">👤 Personal</button><button id="nav-professional" onclick="show('professional')" type="button">💼 Professional</button><button id="nav-spiritual" onclick="show('spiritual')" type="button">🕉 Spiritual</button><button id="nav-economical" onclick="show('economical')" type="button">💰 Economical</button><button id="nav-mental" onclick="show('mental')" type="button">🧠 Mental</button><button id="nav-social" onclick="show('social')" type="button">🤝 Social</button><button id="nav-moral" onclick="show('moral')" type="button">⚖️ Moral</button><button id="nav-device-storage" onclick="show('device-storage')" type="button">💾 Device Storage</button><button id="nav-settings" onclick="show('settings')" type="button">⚙️ Settings</button></nav></aside><main class="main"><header class="top"><div><h1 id="pageTitle">Dashboard</h1><div class="sub">Your daily system — simple, fast and mobile friendly.</div></div><div class="date-panel top-date-dual"><label><span class="label">AD</span><input aria-label="Today (AD)" class="date" id="today" onchange="syncBsFromAd();render()" oninput="syncBsFromAd()" type="date"/></label><label><span class="label">BS</span><input aria-label="Today (BS)" class="date" id="todayBs" inputmode="numeric" onchange="syncTodayFromBs()" onkeydown="if(event.key==='Enter'){event.preventDefault();syncTodayFromBs()}" placeholder="YYYY-MM-DD" type="text"/></label></div></header><section aria-labelledby="pageTitle" class="section active" id="dashboard"><div id="lifeosStaticFallback" style="padding:18px"><div class="module-hero"><div class="eyebrow" style="color:#d8ccff">OM-LIFEOS</div><h2 style="color:#fff;font-size:24px;margin:6px 0">Life Management Dashboard</h2><p style="color:#e5e7eb;margin:0">Local check mode is loaded. If JavaScript is enabled, the full interactive dashboard will initialize automatically.</p></div><div class="grid g3"><div class="card"><h3>📊 Dashboard</h3><p class="muted">Overview, KPIs, AD + BS date and quick actions.</p></div><div class="card"><h3>📅 Planner & Tasks</h3><p class="muted">Daily planner, tasks, routines, habits, goals and focus.</p></div><div class="card"><h3>📝 Notes & Journal</h3><p class="muted">Notes, daily journal, attachments and rich text.</p></div><div class="card"><h3>💰 Finance</h3><p class="muted">Income, expenses, finance tracking and currency.</p></div><div class="card"><h3>🧭 Life Areas</h3><p class="muted">Personal, Professional, Spiritual, Economical, Mental, Social and Moral.</p></div><div class="card"><h3>💾 Backup & Export</h3><p class="muted">JSON backup plus selected menu + date-range Word, Excel and PDF export.</p></div></div><div class="card" style="margin-top:10px"><h3>Local test status</h3><p class="muted">This static screen prevents a blank page when a file preview does not execute JavaScript. Open the downloaded HTML directly in Chrome/Edge for full interaction.</p></div></div></section><section aria-labelledby="pageTitle" class="section" id="mentor"></section><section aria-labelledby="pageTitle" class="section" id="planner"></section><section aria-labelledby="pageTitle" class="section" id="tasks"></section><section aria-labelledby="pageTitle" class="section" id="routine"></section><section aria-labelledby="pageTitle" class="section" id="habits"></section><section aria-labelledby="pageTitle" class="section" id="goals"></section><section aria-labelledby="pageTitle" class="section" id="focus"></section><section aria-labelledby="pageTitle" class="section" id="notes"></section><section aria-labelledby="pageTitle" class="section" id="journal"></section><section aria-labelledby="pageTitle" class="section" id="expenses"></section><section aria-labelledby="pageTitle" class="section" id="personal"></section><section aria-labelledby="pageTitle" class="section" id="professional"></section><section aria-labelledby="pageTitle" class="section" id="spiritual"></section><section aria-labelledby="pageTitle" class="section" id="economical"></section><section aria-labelledby="pageTitle" class="section" id="mental"></section><section aria-labelledby="pageTitle" class="section" id="social"></section><section aria-labelledby="pageTitle" class="section" id="moral"></section><section aria-labelledby="pageTitle" class="section" id="life-balance"></section><section aria-labelledby="pageTitle" class="section" id="calculator"></section><section aria-labelledby="pageTitle" class="section" id="device-storage"></section><section aria-labelledby="pageTitle" class="section" id="settings"></section></main></div><div aria-label="Quick navigation" class="mobile-bottom-nav" id="mobileBottomNav"><button data-section="dashboard" onclick="show('dashboard')" type="button"><span class="mi">⌂</span><span>Home</span></button><button data-section="planner" onclick="show('planner')" type="button"><span class="mi">▦</span><span>Plan</span></button><button data-section="tasks" onclick="show('tasks')" type="button"><span class="mi">✓</span><span>Tasks</span></button><button data-section="habits" onclick="show('habits')" type="button"><span class="mi">◉</span><span>Habits</span></button><button data-section="notes" onclick="show('notes')" type="button"><span class="mi">▤</span><span>Notes</span></button><button data-section="settings" onclick="show('settings')" type="button"><span class="mi">⚙</span><span>More</span></button><button aria-label="Toggle theme" class="bottom-theme" onclick="toggleAppearance()" type="button">☾</button></div><div class="toast" id="toast"></div><div id="bsCalendarModal" onclick="if(event.target===this)closeBsCalendar()"></div>
 
 
 
@@ -913,7 +913,19 @@ function makeReactiveData(root){
       },
       set(target,key,value,receiver){
         const ok=Reflect.set(target,key,value,receiver);
-        if(ok)__dirtySections.add(section==='__root'?String(key):section);
+        if(ok){
+          const changedSection=section==='__root'?String(key):section;
+          __dirtySections.add(changedSection);
+          // Per-record change stamp: nested edits become exportable as "updated only"
+          // without rescanning/re-exporting the whole history. New array items also
+          // receive a stamp when they are inserted. This stays lightweight because
+          // only the edited object is touched.
+          if(section!=='__root'){
+            const stamp=Date.now();
+            if(target && !Array.isArray(target) && typeof target==='object') target.updatedAt=stamp;
+            else if(Array.isArray(target) && value && typeof value==='object' && !Array.isArray(value)) value.updatedAt=stamp;
+          }
+        }
         return ok;
       },
       deleteProperty(target,key){
@@ -2214,7 +2226,7 @@ function renderCalculatorFallback(){
  document.getElementById('calcFallbackRun')?.addEventListener('click',run);document.getElementById('calcFallbackExpr')?.addEventListener('keydown',e=>{if(e.key==='Enter')run()});document.getElementById('calcFallbackClear')?.addEventListener('click',()=>{document.getElementById('calcFallbackExpr').value='';document.getElementById('calcFallbackResult').textContent='—'});
  el.querySelectorAll('[data-qc]').forEach(btn=>btn.addEventListener('click',()=>{const a=Math.max(0,Number(document.getElementById('calcFallbackAmount')?.value)||0),p=Math.max(0,Number(document.getElementById('calcFallbackPct')?.value)||0),people=Math.max(1,Number(document.getElementById('calcFallbackPeople')?.value)||1),d=Math.max(0,Number(document.getElementById('calcFallbackDiscount')?.value)||0);const v=btn.dataset.qc==='percent'?a*p/100:btn.dataset.qc==='discount'?a*(1-d/100):a/people;document.getElementById('calcFallbackQuick').textContent=Number(v).toLocaleString('en-IN',{maximumFractionDigits:2})}));
 }
-function render(){const active=document.querySelector('.section.active');if(!active)return;let id=active.id;if(id==='dashboard')renderDashboard();if(id==='mentor')renderMentor();if(id==='planner')renderPlanner();if(id==='tasks')renderTasks();if(id==='routine')renderRoutine();if(id==='notes')renderNotes();if(id==='journal')renderJournal();if(id==='habits')renderHabits();if(id==='expenses')renderExpenses();if(id==='goals')renderGoals();if(id==='focus')renderFocus();if(LIFEOS_CATEGORIES[id]){if(typeof renderCategory==='function')renderCategory(id)}if(id==='life-balance'){if(typeof renderLifeBalance==='function')renderLifeBalance();else renderLifeBalanceFallback()}if(id==='calculator'){if(typeof renderCalculator==='function')renderCalculator();else renderCalculatorFallback()}if(id==='settings')renderSettings();if(id==='device-storage')window.renderDeviceStorage?.();restoreDrafts();addLazyMoreButton(id);ensureMenuImportTools(id)}
+function render(){const active=document.querySelector('.section.active');if(!active)return;let id=active.id;if(id==='dashboard')renderDashboard();if(id==='mentor')renderMentor();if(id==='planner')renderPlanner();if(id==='tasks')renderTasks();if(id==='routine')renderRoutine();if(id==='notes')renderNotes();if(id==='journal')renderJournal();if(id==='habits')renderHabits();if(id==='expenses')renderExpenses();if(id==='goals')renderGoals();if(id==='focus')renderFocus();if(LIFEOS_CATEGORIES[id]){if(typeof renderCategory==='function')renderCategory(id)}if(id==='life-balance'){try{if(typeof renderLifeBalance==='function')renderLifeBalance();else renderLifeBalanceFallback()}catch(err){console.error('Life Balance render failed',err);try{renderLifeBalanceFallback()}catch(fallbackErr){console.error('Life Balance fallback render failed',fallbackErr);const el=document.getElementById('life-balance');if(el)el.innerHTML='<div class="card"><h2>🌈 Life Balance</h2><p class="meta">Data saved. Re-open Life Balance to refresh the view.</p></div>'}}}if(id==='calculator'){if(typeof renderCalculator==='function')renderCalculator();else renderCalculatorFallback()}if(id==='settings')renderSettings();if(id==='device-storage')window.renderDeviceStorage?.();restoreDrafts();addLazyMoreButton(id);ensureMenuImportTools(id)}
 const __localDate = new Date();
 const __yyyy = __localDate.getFullYear();
 const __mm = String(__localDate.getMonth()+1).padStart(2,'0');
@@ -2437,7 +2449,8 @@ const __todayInput=document.getElementById('today'); if(__todayInput) __todayInp
 
   window.renderCategory=function(id,targetEl){
     const el=targetEl||document.getElementById(id),meta=LIFEOS_CATEGORIES[id];if(!el||!meta)return;
-    const items=getCategoryItems(id);
+    const items=getCategoryItems(id).filter(x=>x&&typeof x==='object');
+    data.categories[id]=items;
     el.innerHTML=`<div class="hero"><div class="eyebrow">LIFE BALANCE</div><h2>${meta[0]}</h2><p>${meta[1]}</p></div><div class="two"><div class="card"><h2>＋ Add ${meta[0].replace(/^\S+\s/,'')} item</h2><div class="form"><input id="catTitle-${id}" placeholder="Title / priority"><textarea id="catText-${id}" placeholder="Write a thought, plan, habit, responsibility or next action..."></textarea><button class="primary" onclick="addCategoryItem('${id}')">Save Item</button></div></div><div class="card"><h2>Focus areas</h2><p class="muted">${meta[2]}</p><div class="list"><div class="item">Keep one clear next action.</div><div class="item">Review this area weekly.</div><div class="item">Avoid overloading the page with unnecessary effects.</div></div></div></div><div class="card" style="margin-top:14px"><div class="between"><h2>Saved items</h2><span class="tag">${items.length} items</span></div><div class="list">${items.length?items.map(x=>`<div class="item ${x.done?'done':''}"><div class="saved-item-row"><div class="saved-main"><b>${esc(x.title)}</b><div class="meta">${esc(x.text||'')}</div></div><div class="saved-item-actions"><button class="secondary" type="button" onclick="toggleCategoryItem('${id}','${x.id}',${!x.done})">${x.done?'↩ Undo':'✓ Done'}</button><button class="danger" type="button" onclick="deleteCategoryItem('${id}','${x.id}')">🗑 Delete</button></div></div></div>`).join(''):'<div class="empty">अभी कोई item नहीं।</div>'}</div></div>`;
   };
   window.selectLifeBalance=function(id){
@@ -2864,9 +2877,13 @@ const __todayInput=document.getElementById('today'); if(__todayInput) __todayInp
 
   async function chooseComputerFolder(){
     if(hasNativeBridge()){
-      const path=await nativeInvoke('choose_export_directory');
+      const result=await nativeInvoke('choose_database_folder');
+      if(!result)return null;
+      const path=String(result.folder||'').trim();
       if(!path)return null;
-      await saveComputerConnection(path);return path;
+      await saveComputerConnection(path);
+      window.__omDatabaseFolder=result;
+      return path;
     }
     if(isMobileRuntime())return null;
     if(!hasLocalFolderPicker())throw new Error('Local folder connection is not supported by this browser. Use Chrome or Edge.');
@@ -2878,15 +2895,38 @@ const __todayInput=document.getElementById('today'); if(__todayInput) __todayInp
   function computerConnected(){return !!(computerDirectoryPath && (hasNativeBridge() || computerDirectoryHandle))}
   function computerStatusHtml(){
     if(isMobileRuntime())return '<span class="backup-connected">● Mobile storage active</span>';
-    if(computerConnected())return `<span class="backup-connected">● Local folder: ${esc(computerDirectoryPath)}</span>`;
-    if(hasNativeBridge())return '<span class="backup-connected backup-disconnected">● Local computer not connected</span>';
+    if(computerConnected())return `<span class="backup-connected">● Computer folder: ${esc(computerDirectoryPath)} · DB uses this folder after restart</span>`;
+    if(hasNativeBridge())return '<span class="backup-connected backup-disconnected">● Computer folder not connected</span>';
     if(hasLocalFolderPicker())return '<span class="backup-connected backup-disconnected">● Local folder not connected</span>';
     return '<span class="backup-connected backup-disconnected">● Local folder connection unavailable</span>';
   }
   async function connectComputer(){
     if(isMobileRuntime()){toast('Mobile storage uses Downloads or Share.');return false}
-    try{const path=await chooseComputerFolder();if(!path)return false;renderSettings();toast(`✓ Local computer folder connected: ${path}`);return true}
-    catch(e){if(e?.name!=='AbortError')toast('Local connection failed: '+(e?.message||'Folder picker unavailable'));return false}
+    try{
+      const path=await chooseComputerFolder();
+      if(!path)return false;
+      renderSettings();
+      if(hasNativeBridge()){
+        toast(`✓ Computer folder connected. Long-life database will use this folder after restarting LifeOS.`);
+      }else{
+        toast(`✓ Local computer folder connected: ${path}`);
+      }
+      return true
+    }catch(e){if(e?.name!=='AbortError')toast('Local connection failed: '+(e?.message||'Folder picker unavailable'));return false}
+  }
+  async function chooseLongLifeDatabaseFolder(){
+    if(!hasNativeBridge()){toast('Long-life SQLite folder selection is available in the Windows/Tauri app.');return false}
+    try{
+      const result=await nativeInvoke('choose_database_folder');
+      if(!result)return false;
+      const path=String(result.folder||'').trim();
+      if(!path)return false;
+      await saveComputerConnection(path);
+      window.__omDatabaseFolder=result;
+      renderSettings();
+      toast('✓ Database folder changed. Restart LifeOS to activate the selected folder.');
+      return true
+    }catch(e){if(e?.name!=='AbortError')toast('Database folder change failed: '+(e?.message||'Folder picker unavailable'));return false}
   }
   async function ensureComputerFolderForExport(){if(isMobileRuntime())return null;if(!computerConnected()){const ok=await connectComputer();if(!ok)return null}return computerDirectoryPath||computerDirectoryHandle}
 
@@ -3045,7 +3085,7 @@ const t=new Uint32Array(256);for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)
   function exportCleanRecord(obj){
     const out={};
     Object.entries(obj||{}).forEach(([k,v])=>{
-      if(['id','createdAt'].includes(k))return;
+      if(['id','createdAt','updatedAt'].includes(k))return;
       if(k==='html'){
         const tmp=document.createElement('div');tmp.innerHTML=String(v||'');out['Content']=tmp.textContent||'';return;
       }
@@ -3058,6 +3098,7 @@ const t=new Uint32Array(256);for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)
     });
     const exportDates=[];Object.entries(obj||{}).forEach(([k,v])=>{if(/(date|time|created|updated|due|start|end|day|timestamp)/i.test(k))(Array.isArray(v)?v:[v]).forEach(x=>exportDates.push(...dateStringsFromValue(x)))});
     Object.defineProperty(out,'__exportDates',{value:[...new Set(exportDates)],enumerable:false});
+    Object.defineProperty(out,'__updatedAt',{value:Number(obj?.updatedAt||obj?.createdAt||0),enumerable:false});
     return out;
   }
   function exportRecordsFromArray(arr){return (Array.isArray(arr)?arr:[]).map(exportCleanRecord)}
@@ -3138,8 +3179,10 @@ const t=new Uint32Array(256);for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)
     return ids.map(id=>({id,title:(navItems.find(x=>x[0]===id)?.[1]||id).replace(/^\S+\s/,''),rows:exportSectionRecords(id)}));
   }
   function selectedExportSections(){
-    const selected=new Set(getExportSelection());
-    return exportSections().filter(sec=>selected.has(sec.id));
+    const selected=getExportSelection();
+    if(!selected.length)return [];
+    const wanted=new Set(selected);
+    return selected.map(id=>({id,title:(navItems.find(x=>x[0]===id)?.[1]||id).replace(/^\S+\s/,''),rows:exportSectionRecords(id)})).filter(sec=>wanted.has(sec.id));
   }
   /* Export the complete current data for the selected menu items and date range.
      Every export is a fresh report; previous exports never hide unchanged records. */
@@ -3230,6 +3273,21 @@ const t=new Uint32Array(256);for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)
       return dates.some(d=>d>=b.from&&d<=b.to);
     });
   }
+  async function prepareNativeExportData(){
+    if(!NATIVE_RUNTIME||!window.omDb?.listPage)return;
+    const selected=getExportSelection();
+    const period=getExportPeriod();
+    const b=exportPeriodBounds();
+    const lazyIds=selected.filter(id=>__lazyMap[id]);
+    for(const id of lazyIds){
+      const key=__lazyMap[id];
+      if(period.mode==='all'){
+        await hydrateNativeSectionFully(id,{pageSize:500});
+      }else{
+        await ensureLazySection(key,{limit:500,fromDate:b.from,toDate:b.to,force:true});
+      }
+    }
+  }
   function filteredExportSections(){
     const sections=selectedExportSections().map(sec=>({...sec,rows:filterRowsByExportPeriod(sec)}));
     const dashboard=sections.find(sec=>sec.id==='dashboard');
@@ -3239,13 +3297,34 @@ const t=new Uint32Array(256);for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)
   function exportPeriodSummary(sections){const find=id=>sections.find(s=>s.id===id)?.rows||[];const tasks=find('tasks'),notes=find('notes'),journal=find('journal'),habits=find('habits'),goals=find('goals'),routines=find('routine'),planner=find('planner'),focus=find('focus'),expenses=find('expenses');const expenseRows=expenses.filter(x=>String(x.recordType||'').toLowerCase()!=='income'),incomeRows=expenses.filter(x=>String(x.recordType||'').toLowerCase()==='income');const sum=rows=>rows.reduce((a,x)=>a+Number(x.amount||0),0);return [{Metric:'Tasks',Value:tasks.length,Completed:tasks.filter(x=>String(x.done).toLowerCase()==='true').length},{Metric:'Notes',Value:notes.length},{Metric:'Journal Entries',Value:journal.length},{Metric:'Habits',Value:habits.length},{Metric:'Goals',Value:goals.length},{Metric:'Routines',Value:routines.length},{Metric:'Daily Plans',Value:planner.length},{Metric:'Focus Sessions',Value:focus.length},{Metric:'Expenses Total',Value:sum(expenseRows)},{Metric:'Income Total',Value:sum(incomeRows)},{Metric:'Balance (Income - Expense)',Value:sum(incomeRows)-sum(expenseRows)},...Object.keys(LIFEOS_CATEGORIES||{}).map(id=>({Metric:LIFEOS_CATEGORIES[id][0].replace(/^\S+\s/,''),Value:find(id).length}))]}
   function exportStateKey(format){return KEY+'_export_state_'+format+'_'+exportPeriodLabel().replace(/[^a-z0-9]+/gi,'_')}
   function readExportState(format){try{return JSON.parse(localStorage.getItem(exportStateKey(format))||'null')}catch(e){return null}}
-  function writeExportState(format,sections){try{const state={version:3,exportedAt:Date.now(),period:exportPeriodLabel(),sections:{}};sections.forEach(sec=>{state.sections[sec.id]=sec.rows.map(r=>exportRowKey(sec,r))});localStorage.setItem(exportStateKey(format),JSON.stringify(state));return true}catch(e){console.warn('Export state save failed',e);return false}}
+  function writeExportState(format,sections){
+    try{
+      const state={version:5,exportedAt:Date.now(),period:exportPeriodLabel(),sections:{}};
+      (sections||[]).forEach(sec=>{state.sections[sec.id]={count:Array.isArray(sec.rows)?sec.rows.length:0};});
+      localStorage.setItem(exportStateKey(format),JSON.stringify(state));
+      return true;
+    }catch(e){console.warn('Export state save failed',e);return false}
+  }
+  function rowUpdatedAt(row){return Number(row?.__updatedAt||row?.updatedAt||row?.createdAt||0)}
   function exportChangedSections(format){
-    /* Word/Excel/PDF are user-requested reports: always export the complete data
-       for the selected menu items and selected date range. Never silently downgrade
-       an All Data export to changed-only rows after a previous export. */
+    /* Export contract: only the user's selected menus/date range.
+       First export establishes a baseline; later exports contain only records
+       changed after the previous successful export for that format+period. */
     const all=filteredExportSections();
-    return getExportSelection().length?all:[];
+    if(!getExportSelection().length)return [];
+    const prev=readExportState(format);
+    if(!prev?.exportedAt)return all;
+    const watermark=Number(prev.exportedAt)||0;
+    return all.map(sec=>{
+      const rows=(sec.rows||[]).filter(row=>{
+        const stamp=rowUpdatedAt(row);
+        // Summary/metadata sections are singleton-style. Include them only when
+        // the app changed after the last export, never as unrelated extra data.
+        if(!stamp)return Number(data?.__updatedAt||0)>watermark;
+        return stamp>watermark;
+      });
+      return {...sec,rows};
+    }).filter(sec=>sec.rows.length>0);
   }
   function currentExportStateSections(){return filteredExportSections()}
   function commitExportState(format,sections){writeExportState(format,sections)}
@@ -3257,8 +3336,7 @@ const t=new Uint32Array(256);for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)
       if(!rs.length){rows.push(['No data recorded in the selected period.'],['']);return;}
       const hs=[...new Set(rs.flatMap(r=>Object.keys(r||{})))].slice(0,10);
       if(hs.length)rows.push(hs);
-      rs.slice(0,500).forEach(r=>rows.push(hs.map(h=>exportSafeValue(r?.[h]??''))));
-      if(rs.length>500)rows.push([`Showing first 500 of ${rs.length} selected records.`]);
+      rs.forEach(r=>rows.push(hs.map(h=>exportSafeValue(r?.[h]??''))));
       rows.push(['']);
     });
     if(rows.length===5)rows.push(['No data recorded in the selected export.']);
@@ -3286,7 +3364,11 @@ const t=new Uint32Array(256);for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)
   }
   function ultraFinanceRows(sections){
     const rows=sections.find(s=>s.id==='expenses')?.rows||[];
-    return rows.map(x=>({Type:String(x.recordType||'Expense').toLowerCase()==='income'?'Income':'Expense',Source:String(x.source||x.Source||x.category||x.Category||x.title||''),Amount:Number(x.amount||x.Amount||0),Date:String(x.date||x.Date||x.createdAt||''),Note:String(x.note||x.Note||'')})).filter(x=>x.Source||x.Amount||x.Date||x.Note);
+    return rows.map(x=>{
+      const source=String(x.source||x.Source||x['Source / Category']||'').trim();
+      const category=String(x.category||x.Category||source||x.title||'Uncategorized').trim()||'Uncategorized';
+      return {Type:String(x.recordType||x.RecordType||x.type||x.Type||'Expense').toLowerCase()==='income'?'Income':'Expense',Source:source,Category:category,Amount:Number(x.amount||x.Amount||0),Date:String(x.date||x.Date||x.createdAt||''),Note:String(x.note||x.Note||'')};
+    }).filter(x=>x.Category||x.Source||x.Amount||x.Date||x.Note);
   }
   function ultraNet(fin){let inc=0,exp=0;fin.forEach(x=>x.Type==='Income'?inc+=x.Amount:exp+=x.Amount);return {inc,exp,net:inc-exp}}
   function ultraWordCell(text,bold=false,shade='FFFFFF',width=2340){return `<w:tc><w:tcPr><w:tcW w:w="${width}" w:type="dxa"/><w:shd w:fill="${shade}"/><w:tcBorders><w:top w:val="single" w:sz="5" w:color="D9DEE8"/><w:left w:val="single" w:sz="5" w:color="D9DEE8"/><w:bottom w:val="single" w:sz="5" w:color="D9DEE8"/><w:right w:val="single" w:sz="5" w:color="D9DEE8"/></w:tcBorders></w:tcPr><w:p><w:pPr><w:spacing w:after="0"/></w:pPr><w:r>${bold?'<w:rPr><w:b/><w:color w:val="FFFFFF"/></w:rPr>':''}${String(text??'').split('\n').map((part,idx)=>`<w:t xml:space="preserve">${officeXmlEsc(part)}</w:t>${idx<String(text??'').split('\n').length-1?'<w:br/>':''}`).join('')}</w:r></w:p></w:tc>`}
@@ -3305,7 +3387,7 @@ const t=new Uint32Array(256);for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)
     const summaryRows=[
       [`Total Income\n${sym}${Number(income).toLocaleString('en-US')}`,`Total Expense\n${sym}${Number(expense).toLocaleString('en-US')}`,`Net Balance\n${sym}${Number(income-expense).toLocaleString('en-US')}`,`Savings Rate\n${savings.toFixed(1)}%`]
     ];
-    const activity=fin.slice(0,80).map(r=>[r.Type,r.Category,`${sym}${Number(r.Amount||0).toLocaleString('en-US')}`]);
+    const activity=fin.map(r=>[r.Type,r.Category||r.Source||'Uncategorized',`${sym}${Number(r.Amount||0).toLocaleString('en-US')}`]);
     const selectedTitles=profile.titles.length?profile.titles.join(' • '):'Dashboard • Finance • Activity';
     let body='';
     body+=h('OM • LIFEOS',30,'123B4A');
@@ -3320,15 +3402,15 @@ const t=new Uint32Array(256);for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)
     body+=ultraWordTable(['Type','Category','Amount'],activity,[2500,3900,2960]);
     body+=p('');
     body+=h('All Menu Data',21,'123B4A');
-    body+=p('Complete LifeOS menu data is included below; financial activity is not the only exported dataset.',15,false,'6B7B83');
-    (sections||[]).filter(sec=>sec.id!=='dashboard' && sec.id!=='expenses').forEach(sec=>{
+    body+=p('Only the selected menus are included below; unchanged records are omitted after the first baseline export.',15,false,'6B7B83');
+    (sections||[]).filter(sec=>sec.id!=='dashboard').forEach(sec=>{
       body+=p(sec.title,17,true,'263238');
       const rs=Array.isArray(sec.rows)?sec.rows:[];
       if(!rs.length){body+=p('No data recorded in the selected period.',13,false,'6B7B83');return;}
-      const hs=[...new Set(rs.flatMap(r=>Object.keys(r||{})))].slice(0,8);
-      const rr=rs.slice(0,120).map(r=>hs.map(k=>exportSafeValue(r?.[k]??'')));
+      const hs=[...new Set(rs.flatMap(r=>Object.keys(r||{})))];
+      const rr=rs.map(r=>hs.map(k=>exportSafeValue(r?.[k]??'')));
       body+=ultraWordTable(hs,rr,hs.map(()=>Math.floor(9360/Math.max(1,hs.length))));
-      if(rs.length>120)body+=p(`Showing first 120 of ${rs.length} records.`,12,false,'6B7B83');
+      if(!rs.length)body+=p('No data recorded in the selected period.',12,false,'6B7B83');
       body+=p('');
     });
     body+=h('Export Profile',21,'123B4A');
@@ -3416,7 +3498,7 @@ const t=new Uint32Array(256);for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)
     const sheet2=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetPr><outlinePr summaryBelow="1" summaryRight="1"/><pageSetUpPr fitToPage="1"/></sheetPr><dimension ref="A1:H17"/><sheetViews><sheetView showGridLines="0" workbookViewId="0"><pane ySplit="9" topLeftCell="A10" activePane="bottomLeft" state="frozen"/><selection pane="bottomLeft" activeCell="A1" sqref="A1"/></sheetView></sheetViews><sheetFormatPr baseColWidth="8" defaultRowHeight="15"/>${cols([20,18,15,4,24,18,15,14])}<sheetData>${dash.join('')}</sheetData><mergeCells count="10"><mergeCell ref="A3:H3"/><mergeCell ref="E6:F7"/><mergeCell ref="C6:D7"/><mergeCell ref="G6:H7"/><mergeCell ref="C5:D5"/><mergeCell ref="A5:B5"/><mergeCell ref="A6:B7"/><mergeCell ref="E5:F5"/><mergeCell ref="G5:H5"/><mergeCell ref="A1:H2"/></mergeCells><pageMargins left="0.75" right="0.75" top="0.5" bottom="0.5" header="0.5" footer="0.5"/><pageSetup orientation="landscape" paperSize="9" fitToHeight="1" fitToWidth="1"/><drawing xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:id="rId1"/></worksheet>`;
 
     const tx=[['Type','Source / Category',amountHeader,'Date','Note']];
-    fin.slice(0,5000).forEach(x=>tx.push([x.Type,x.Source,Number(x.Amount||0),x.Date,x.Note]));
+    fin.forEach(x=>tx.push([x.Type,x.Category||x.Source||'Uncategorized',Number(x.Amount||0),x.Date,x.Note]));
     const txRows=tx.map((r,i)=>row(i+1,r.map((v,j)=>({v,s:i===0?8:(j===2?10:9)})))).join('');
     const txLast=Math.max(1,tx.length);
     const sheet3=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetPr><outlinePr summaryBelow="1" summaryRight="1"/><pageSetUpPr fitToPage="1"/></sheetPr><dimension ref="A1:E${txLast}"/><sheetViews><sheetView showGridLines="0" workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/><selection pane="bottomLeft" activeCell="A1" sqref="A1"/></sheetView></sheetViews><sheetFormatPr baseColWidth="8" defaultRowHeight="15"/>${cols([14,28,18,14,42])}<sheetData>${txRows}</sheetData><autoFilter ref="A1:E${txLast}"/><tableParts count="1"><tablePart xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:id="rId1"/></tableParts><pageMargins left="0.75" right="0.75" top="1" bottom="1" header="0.5" footer="0.5"/><pageSetup orientation="landscape" paperSize="9" fitToWidth="1"/></worksheet>`;
@@ -3431,10 +3513,10 @@ const t=new Uint32Array(256);for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)
     const safeSheetName=(name,used)=>{let n=String(name||'LifeOS').replace(/[\\\/\?\*\[\]:]/g,' ').trim().slice(0,31)||'LifeOS';const base=n;let i=2;while(used.has(n)){n=(base.slice(0,28)+' '+i).slice(0,31);i++;}used.add(n);return n};
     const menuUsed=new Set(['Read Me','Executive Dashboard','Transactions']);
     const menuDefs=[];
-    (sections||[]).filter(sec=>sec.id!=='dashboard'&&sec.id!=='expenses').forEach(sec=>{
+    (sections||[]).filter(sec=>sec.id!=='dashboard').forEach(sec=>{
       const name=safeSheetName(sec.title,menuUsed), rows=Array.isArray(sec.rows)?sec.rows:[];
-      const headers=[...new Set(rows.flatMap(r=>Object.keys(r||{})))].slice(0,12), hs=headers.length?headers:['No Data'];
-      const dataRows=rows.slice(0,5000), outRows=[row(1,hs.map(v=>({v,s:8})))];
+      const headers=[...new Set(rows.flatMap(r=>Object.keys(r||{})))], hs=headers.length?headers:['No Data'];
+      const dataRows=rows, outRows=[row(1,hs.map(v=>({v,s:8})))];
       dataRows.forEach(r=>outRows.push(row(outRows.length+1,hs.map(h=>({v:exportSafeValue(r?.[h]??''),s:9})))));
       const last=Math.max(1,dataRows.length+1), colWidths=hs.map(h=>Math.min(42,Math.max(14,String(h).length+6)));
       const xml=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetPr><outlinePr summaryBelow="1" summaryRight="1"/><pageSetUpPr fitToPage="1"/></sheetPr><dimension ref="A1:${xlsxCol(hs.length)}${last}"/><sheetViews><sheetView showGridLines="0" workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/><selection pane="bottomLeft" activeCell="A1" sqref="A1"/></sheetView></sheetViews><sheetFormatPr baseColWidth="8" defaultRowHeight="15"/>${cols(colWidths)}<sheetData>${outRows.join('')}</sheetData><autoFilter ref="A1:${xlsxCol(hs.length)}${last}"/><pageMargins left="0.65" right="0.65" top="0.8" bottom="0.8" header="0.4" footer="0.4"/><pageSetup orientation="landscape" paperSize="9" fitToWidth="1"/></worksheet>`;
@@ -3467,10 +3549,22 @@ const t=new Uint32Array(256);for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)
     return zipStore(files);
   }
   window.exportLifeOSWord=async function(){
-    try{const name='LifeOS_ULTRA_PREMIUM_'+today()+'.docx';const sections=exportChangedSections('word');if(!sections.length){toast('Please select at least one menu item for Word export');return;}const blob=makeDocxBlob(sections);const ok=await saveComputerForExport(name,blob,'application/vnd.openxmlformats-officedocument.wordprocessingml.document','Word');if(ok){commitExportState('word',currentExportStateSections());toast('✓ Word exported: Ultra Premium format');}}catch(e){console.error(e);toast('Word export failed: '+(e?.message||'Unknown error'))}
+    try{const name='LifeOS_ULTRA_PREMIUM_'+today()+'.docx';const sections=exportChangedSections('word');if(!sections.length){toast('No new/updated data found for the selected menus and date range — export skipped');return;}const blob=makeDocxBlob(sections);const ok=await saveComputerForExport(name,blob,'application/vnd.openxmlformats-officedocument.wordprocessingml.document','Word');if(ok){commitExportState('word',currentExportStateSections());toast('✓ Word exported: selected new/updated data');}}catch(e){console.error(e);toast('Word export failed: '+(e?.message||'Unknown error'))}
   };
   window.exportLifeOSExcel=async function(){
-    try{const name='LifeOS_ULTRA_PREMIUM_'+today()+'.xlsx';const sections=exportChangedSections('excel');if(!sections.length){toast('Please select at least one menu item for Excel export');return;}const blob=makeXlsxBlob(sections);const ok=await saveComputerForExport(name,blob,'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet','Excel');if(ok){commitExportState('excel',currentExportStateSections());toast('✓ Excel exported: Ultra Premium format');}}catch(e){console.error(e);toast('Excel export failed: '+(e?.message||'Unknown error'))}
+    try{
+      const name='LifeOS_ULTRA_PREMIUM_'+today()+'.xlsx';
+      const selected=getExportSelection();
+      if(!selected.length){toast('No new/updated data found for the selected menus and date range — export skipped');return;}
+      toast('Preparing selected data for Excel…');
+      await prepareNativeExportData();
+      const sections=exportChangedSections('excel');
+      if(!sections.length){toast('Please select at least one menu item for Excel export');return;}
+      await new Promise(r=>setTimeout(r,0));
+      const blob=makeXlsxBlob(sections);
+      const ok=await saveComputerForExport(name,blob,'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet','Excel');
+      if(ok){commitExportState('excel',currentExportStateSections());toast('✓ Excel exported: selected new/updated data');}
+    }catch(e){console.error(e);toast('Excel export failed: '+(e?.message||'Unknown error'))}
   };
   function makePdfBlob(sections=exportChangedSections('pdf')){
     const profile=ultraExportProfile(sections), fin=ultraFinanceRows(sections);
@@ -3498,7 +3592,13 @@ const t=new Uint32Array(256);for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)
     const gap=12,cw=(W-margin*2-gap*3)/4,cy=245;cards.forEach((c,i)=>{const xx=margin+i*(cw+gap);ctx.fillStyle=white;ctx.strokeStyle=line;ctx.beginPath();ctx.roundRect(xx,cy,cw,92,12,12);ctx.fill();ctx.stroke();ctx.fillStyle=muted;ctx.font='700 11px Arial';ctx.fillText(c[0].toUpperCase(),xx+14,cy+25);ctx.fillStyle=c[2];ctx.font='700 22px Arial';ctx.fillText(c[1],xx+14,cy+61);});
     y=380;ctx.fillStyle=navy;ctx.font='700 21px Arial';ctx.fillText('Financial Activity',margin,y);y+=18;ctx.fillStyle=muted;ctx.font='14px Arial';ctx.fillText('Structured financial detail for the selected period.',margin,y+20);y+=50;
     ctx.fillStyle=navy;ctx.fillRect(margin,y,W-margin*2,34);ctx.fillStyle=white;ctx.font='700 13px Arial';['Type','Category','Amount','Date'].forEach((v,i)=>ctx.fillText(v,[margin,margin+180,margin+590,margin+870][i]+10,y+22));y+=34;
-    fin.slice(0,24).forEach((r,i)=>{ctx.fillStyle=i%2?'#FFFFFF':'#F8FAFB';ctx.fillRect(margin,y,W-margin*2,30);ctx.fillStyle='#40545C';ctx.font='12px Arial';ctx.fillText(String(r.Type||''),margin+10,y+20);ctx.fillText(String(r.Category||'').slice(0,45),margin+190,y+20);ctx.fillText(money(r.Amount),margin+600,y+20);ctx.fillText(String(r.Date||'').slice(0,18),margin+880,y+20);y+=30;});
+    fin.forEach((r,i)=>{
+      if(y+30>H-92){
+        newPage('Financial Activity • continued');
+        ctx.fillStyle=navy;ctx.fillRect(margin,y,W-margin*2,34);ctx.fillStyle=white;ctx.font='700 13px Arial';['Type','Category','Amount','Date'].forEach((v,j)=>ctx.fillText(v,[margin,margin+180,margin+590,margin+870][j]+10,y+22));y+=34;
+      }
+      ctx.fillStyle=i%2?'#FFFFFF':'#F8FAFB';ctx.fillRect(margin,y,W-margin*2,30);ctx.fillStyle='#40545C';ctx.font='12px Arial';ctx.fillText(String(r.Type||''),margin+10,y+20);ctx.fillText(String(r.Category||''),margin+190,y+20);ctx.fillText(money(r.Amount),margin+600,y+20);ctx.fillText(String(r.Date||''),margin+870,y+20);y+=30;
+    });
     y+=22;ctx.fillStyle=navy;ctx.font='700 21px Arial';ctx.fillText('Export Profile',margin,y);y+=30;
     const profileRows=[['Format','A4 / Executive Print'],['Period',profile.period],['Currency','NPR'],['Layout','Premium • compact • print-safe'],['Sections',profile.titles.length?profile.titles.join(' • '):'All LifeOS Menus']];
     profileRows.forEach(r=>{ctx.fillStyle=white;ctx.strokeStyle=line;ctx.fillRect(margin,y,W-margin*2,30);ctx.strokeRect(margin,y,W-margin*2,30);ctx.fillStyle=muted;ctx.font='700 12px Arial';ctx.fillText(r[0],margin+12,y+20);ctx.fillStyle='#263238';ctx.font='12px Arial';ctx.fillText(String(r[1]).slice(0,105),margin+190,y+20);y+=30;});
@@ -3532,10 +3632,10 @@ const t=new Uint32Array(256);for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)
     try{
       const name='LifeOS_ULTRA_PREMIUM_'+today()+'.pdf';
       const sections=exportChangedSections('pdf');
-      if(!sections.length){toast('Please select at least one menu item for PDF export');return;}
+      if(!sections.length){toast('No new/updated data found for the selected menus and date range — export skipped');return;}
       const blob=makePdfBlob(sections);
       const ok=await saveComputerForExport(name,blob,'application/pdf','PDF');
-      if(ok){commitExportState('pdf',currentExportStateSections());toast('✓ PDF exported: selected menu + date range');}
+      if(ok){commitExportState('pdf',currentExportStateSections());toast('✓ PDF exported: selected new/updated data');}
     }catch(e){console.error(e);toast('PDF export failed: '+(e?.message||'Unknown error'))}
   };
   /* Universal document/data importer: Excel (.xlsx/.xls), Word (.docx/.doc) and PDF.
@@ -3811,7 +3911,32 @@ const t=new Uint32Array(256);for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)
       });lifeosCalcState.history=(lifeosCalcState.history||[]).slice(0,50);lifeosCalcState.saved=(lifeosCalcState.saved||[]).slice(0,30);lifeosCalcState.favorites=(lifeosCalcState.favorites||[]).slice(0,50);lifeosCalcState.recent=(lifeosCalcState.recent||[]).slice(0,12);calcPersist();return {count};
     }
     if(id==='life-balance'){
-      let count=0;items.forEach(({obj})=>{const area=String(importRecordValue(obj,'life area','area')||data.lifeBalanceCategory||'personal').trim().toLowerCase();const target=LIFEOS_CATEGORIES[area]?area:(Object.keys(LIFEOS_CATEGORIES).find(k=>importNorm(LIFEOS_CATEGORIES[k][0]).includes(importNorm(area)))||data.lifeBalanceCategory||'personal');const r=importCanonicalRecord(target,obj);data.categories[target]=Array.isArray(data.categories[target])?data.categories[target]:[];data.categories[target].unshift(r);count++});return {count};
+      let count=0;
+      data.categories=(data.categories&&typeof data.categories==='object')?data.categories:{};
+      const fallback=LIFEOS_CATEGORIES[data.lifeBalanceCategory]?data.lifeBalanceCategory:'personal';
+      const resolveArea=(value)=>{
+        const raw=importNorm(value);
+        if(!raw)return fallback;
+        if(LIFEOS_CATEGORIES[raw])return raw;
+        const aliases={personal:'personal',professional:'professional',spiritual:'spiritual',economical:'economical',economic:'economical',mental:'mental',social:'social',moral:'moral',finance:'economical',money:'economical',career:'professional',work:'professional',relationships:'social',relationship:'social',mind:'mental',ethics:'moral',character:'moral'};
+        if(aliases[raw])return aliases[raw];
+        const hit=Object.keys(LIFEOS_CATEGORIES).find(k=>{
+          const label=importNorm(LIFEOS_CATEGORIES[k][0]);
+          return raw===label || raw.includes(label) || label.includes(raw);
+        });
+        return hit||fallback;
+      };
+      items.forEach(({obj})=>{
+        const target=resolveArea(importRecordValue(obj,'life area')||importRecordValue(obj,'area'));
+        const r=importCanonicalRecord(target,obj);
+        if(!r.title && !r.text)return;
+        r.id=r.id||uid();
+        r.createdAt=Number(r.createdAt)||Date.now();
+        data.categories[target]=Array.isArray(data.categories[target])?data.categories[target]:[];
+        data.categories[target].unshift(r);
+        count++;
+      });
+      return {count};
     }
     const arrKey={tasks:'tasks',routine:'routines',habits:'habits',goals:'goals',focus:'focusSessions'}[id];
     if(arrKey){const imported=items.map(({obj})=>importCanonicalRecord(id,obj)).filter(r=>r&&((r.title||r.name||r.date)));if(id==='tasks')data.tasks.unshift(...imported);if(id==='routine')data.routines.unshift(...imported);if(id==='habits')data.habits.unshift(...imported);if(id==='goals')data.goals.unshift(...imported);if(id==='focus')data.focusSessions.unshift(...imported);return {count:imported.length};}
@@ -4004,11 +4129,19 @@ const t=new Uint32Array(256);for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)
         nativeSections.forEach(k=>__dirtySections.delete(k));
         for(const k of nativeSections){__lazyState.delete(k);window.omDb.primeSection?.(k,[]);}
         if(id==='expenses'){__lazyState.delete('income');__lazyState.delete('expenses');}
-        // IMPORTANT: a successful import must immediately rehydrate the full
-        // canonical section from SQLite. The old code only loaded the default
-        // lazy page (often today's/last 200 records), so imported rows existed
-        // in DB/All view but disappeared from period views and auto-linked menus.
-        await hydrateImportedNativeMenus([id,...nativeSections]);
+        // IMPORTANT: keep the UI memory-light after import. The database is the
+        // canonical long-life store; do NOT hydrate the entire section into RAM.
+        // In the active menu, reload only the current period/page. Other menus stay
+        // lazy and fetch their records only when opened. This prevents imports from
+        // making the app progressively slower as history grows.
+        const activeId=document.querySelector('.section.active')?.id||id;
+        if(activeId==='dashboard'){
+          await ensureSectionLoaded('dashboard');
+        }else if(activeId==='life-balance' || activeId==='calculator' || activeId==='settings'){
+          // singleton-backed sections already contain the imported records; render directly.
+        }else if(__lazyMap[activeId] || activeId==='expenses'){
+          await ensureSectionLoaded(activeId);
+        }
       }else{save();}
       let verified=saved;
       if(NATIVE_RUNTIME&&window.omDb?.count){
@@ -4032,7 +4165,7 @@ const t=new Uint32Array(256);for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)
       // Full hydration above is authoritative after import. Do not call the
       // normal period-limited lazy loader here, otherwise it would replace the
       // freshly hydrated arrays with only the current period/page.
-      if(id==='life-balance'&&data.lifeBalanceCategory)renderLifeBalance();
+      if(id==='life-balance')closeMenuImportModal();
       render();renderSettings();
       result.className='menu-import-result ok';result.innerHTML=`✓ ${saved} record(s) imported into <b>${esc(MENU_IMPORT_LABELS[id])}</b>, mapped to app fields, saved and verified. <span class="meta">Verified records: ${verified}</span>`;
       toast(`✓ ${saved} records imported and verified in ${MENU_IMPORT_LABELS[id]}`);
@@ -4287,7 +4420,7 @@ function ensureMenuImportTools(id){
       <div class="settings-left-stack">
         <div class="card"><h2>🎨 Appearance</h2><p class="muted">Readable light mode is default. Theme switch remains available in the sidebar.</p><button class="secondary" type="button" onclick="window.toggleAppearance();return false">🌗 Toggle Light / Dark</button></div>
         <div class="card"><h2>⚡ Performance</h2><p class="muted">Native SQLite is the long-life record store for the Windows app: WAL mode, indexed date queries, background writes and bounded list/search APIs. IndexedDB is used for browser fallback/legacy attachment migration; native SQLite is the canonical long-life store and includes attachment payloads after migration. Large synchronous localStorage writes stay off the critical path.</p></div>
-        <div class="card"><h2>🗄️ Long-life Database</h2><p class="muted">ॐ keeps records in native SQLite. Changed sections are written incrementally, so adding thousands of records does not require rewriting the whole history. The app also creates rolling local database backups automatically.</p><div class="row"><button class="secondary" type="button" onclick="window.checkOmDatabase()">Check database</button><button class="secondary" type="button" onclick="window.backupOmDatabase()">Backup now</button><button class="secondary" type="button" onclick="window.restoreOmDatabase()">Restore backup</button><span id="omDbStatus" class="meta">Checking…</span></div><div id="omDbBackupStatus" class="meta" style="margin-top:6px">Quiet auto-backup: checks about every 5 min and only snapshots after 90s idle when data changed · Documents/Om-LifeOS/DatabaseBackups</div></div>
+        <div class="card"><h2>🗄️ Long-life Database</h2><p class="muted">ॐ keeps records in native SQLite. You can choose a computer folder for the live long-life database; the same connected folder is also used for document exports and rolling database backups. The current database is verified and migrated into the selected folder, then LifeOS is restarted to activate it.</p><div class="row"><button class="secondary" type="button" onclick="window.chooseLongLifeDatabaseFolder()">📁 Choose Database Folder</button><button class="secondary" type="button" onclick="window.checkOmDatabase()">Check database</button><button class="secondary" type="button" onclick="window.backupOmDatabase()">Backup now</button><button class="secondary" type="button" onclick="window.restoreOmDatabase()">Restore backup</button><span id="omDbStatus" class="meta">Checking…</span></div><div id="omDbBackupStatus" class="meta" style="margin-top:6px">Default: app data folder. When a computer folder is connected, live DB = selected folder/om-lifeos.sqlite3 · backups = selected folder/DatabaseBackups · exports = selected folder/Word, Excel, PDF, Backup.</div></div>
       </div>
       <div class="card settings-backup-card"><div class="between"><div><h2>💾 Backup &amp; Export</h2><p class="muted">Document-friendly backups · local computer folder</p></div><div id="backupConnectionStatus">${computerStatusHtml()}</div></div><div class="export-period-box"><div class="backup-actions-title">Export Period</div><div class="export-period-controls"><select id="exportPeriodSelect" onchange="window.changeExportPeriod(this.value)"><option value="all">All Data</option><option value="week">This Week</option><option value="month">This Month</option><option value="year">This Year</option><option value="custom">Custom Date Range</option></select><div id="exportCustomDates" style="display:none;gap:8px;align-items:center;flex-wrap:wrap"><label>From <input id="exportFromDate" type="date"></label><label>To <input id="exportToDate" type="date"></label><button class="secondary" type="button" onclick="window.applyCustomExportPeriod()">Apply</button></div></div><div class="muted" style="margin-top:6px">Current export: <span id="exportPeriodLabel">All Data</span></div></div><div class="backup-actions-title">Export Selection</div>
       <details class="export-selection-dropdown" id="exportSelectionDropdown">
@@ -4303,7 +4436,7 @@ function ensureMenuImportTools(id){
           <div class="export-selection-grid">${(Array.isArray(navItems)?navItems:[]).map(x=>{const id=String(x?.[0]||''),label=String(x?.[1]||id).replace(/^\S+\s/,'');return `<label class="export-selection-item"><input data-export-section type="checkbox" value="${esc(id)}" ${isExportSectionSelected(id)?'checked':''} onchange="window.changeExportSection('${esc(id)}',this.checked)"><span>${esc(label)}</span></label>`}).join('')}</div>
         </div>
       </details>
-<div class="backup-actions-title">Backup Controls</div><div class="backup-actions-grid"><label class="secondary backup-import-label">⬆️ JSON Backup<input type="file" accept="application/json,.json" onchange="window.importLifeOSBackup(this)"></label><div class="backup-export-menu-wrap"><button class="secondary" type="button" onclick="window.toggleBackupExportMenu(event)">⬇️ Export ▾</button><div class="backup-export-menu" id="backupExportMenu"><button type="button" onclick="window.exportLifeOSWord();window.toggleBackupExportMenu()">▣ Word — Selected</button><button type="button" onclick="window.exportLifeOSExcel();window.toggleBackupExportMenu()">▤ Excel — Selected</button><button type="button" onclick="window.exportLifeOSPdf();window.toggleBackupExportMenu()">▧ PDF — Selected</button><button type="button" onclick="window.exportLifeOSBackup();window.toggleBackupExportMenu()">▣ JSON — Full Backup</button></div></div><button class="secondary backup-connect" type="button" onclick="${computerConnected()?'window.disconnectComputer()':'window.connectComputer()'}">▣ ${computerConnected()?'Disconnect Computer':'Connect Computer'}</button></div><div class="card import-data-card"><div class="between"><div><h3>📥 Direct Data Import</h3><p class="muted">Excel data ka destination aap khud choose kar sakte ho: Auto, Expenses, Income, Tasks ya Notes.</p><div style="margin-top:8px"><label class="meta">Import Excel as <select id="lifeosImportMode" style="margin-left:6px;min-width:170px"><option value="auto">Auto detect</option><option value="expenses">Expenses</option><option value="income">Income</option><option value="tasks">Tasks</option><option value="notes">Notes</option></select></label></div></div><label class="primary import-data-label">📂 Import Files<input id="lifeosDocumentImport" type="file" multiple accept=".xlsx,.xls,.docx,.pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/pdf" onchange="window.importLifeOSDocuments(this)"></label></div><div class="import-data-help">Excel Auto mode income/expense/type columns ko alag map karega. Explicit mode select karne par wahi destination use hoga. Word/PDF Notes mein jayenge. Existing data replace nahi hoga. True legacy <b>.xls</b> may need conversion to <b>.xlsx</b>.</div></div><div class="currency-note" style="margin-top:9px">Connect Computer में एक local computer folder चुनें. Word, Excel, PDF और Backup अलग folders में save होंगे. Word/Excel/PDF में ऊपर चुने हुए menu items और चुनी हुई date range का data export होगा. All Data में selected menu items का complete data आता है; Week/Month/Year/Custom में selected range का fresh complete data आता है. JSON Full Backup पूरा backup रहता है.</div></div>
+<div class="backup-actions-title">Backup Controls</div><div class="backup-actions-grid"><label class="secondary backup-import-label">⬆️ JSON Backup<input type="file" accept="application/json,.json" onchange="window.importLifeOSBackup(this)"></label><div class="backup-export-menu-wrap"><button class="secondary" type="button" onclick="window.toggleBackupExportMenu(event)">⬇️ Export ▾</button><div class="backup-export-menu" id="backupExportMenu"><button type="button" onclick="window.exportLifeOSWord();window.toggleBackupExportMenu()">▣ Word — Updated Only</button><button type="button" onclick="window.exportLifeOSExcel();window.toggleBackupExportMenu()">▤ Excel — Updated Only</button><button type="button" onclick="window.exportLifeOSPdf();window.toggleBackupExportMenu()">▧ PDF — Updated Only</button><button type="button" onclick="window.exportLifeOSBackup();window.toggleBackupExportMenu()">▣ JSON — Full Backup</button></div></div><button class="secondary backup-connect" type="button" onclick="${computerConnected()?'window.disconnectComputer()':'window.connectComputer()'}">▣ ${computerConnected()?'Disconnect Computer':'Connect Computer'}</button></div><div class="card import-data-card"><div class="between"><div><h3>📥 Direct Data Import</h3><p class="muted">Excel data ka destination aap khud choose kar sakte ho: Auto, Expenses, Income, Tasks ya Notes.</p><div style="margin-top:8px"><label class="meta">Import Excel as <select id="lifeosImportMode" style="margin-left:6px;min-width:170px"><option value="auto">Auto detect</option><option value="expenses">Expenses</option><option value="income">Income</option><option value="tasks">Tasks</option><option value="notes">Notes</option></select></label></div></div><label class="primary import-data-label">📂 Import Files<input id="lifeosDocumentImport" type="file" multiple accept=".xlsx,.xls,.docx,.pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/pdf" onchange="window.importLifeOSDocuments(this)"></label></div><div class="import-data-help">Excel Auto mode income/expense/type columns ko alag map karega. Explicit mode select karne par wahi destination use hoga. Word/PDF Notes mein jayenge. Existing data replace nahi hoga. True legacy <b>.xls</b> may need conversion to <b>.xlsx</b>.</div></div><div class="currency-note" style="margin-top:9px">Connect Computer में एक local computer folder चुनें. Windows/Tauri में यही folder long-life SQLite database के लिए भी use होगा; database migration ke baad app restart करके selected folder active होगा. Word, Excel, PDF और Backup उसी folder के अलग subfolders में save होंगे. Word/Excel/PDF में सिर्फ ऊपर चुने हुए menu items और चुनी हुई date range का data आएगा. पहली successful export baseline बनाती है; उसके बाद उसी format + period में सिर्फ नया/updated data export होगा. Unchanged पुराना data दोबारा नहीं आएगा. JSON Full Backup अलग से पूरा backup रहता है.</div></div>
     </div>
     <div class="card settings-card"><h2>💱 Currency</h2><p class="muted">Changing currency changes display/accounting currency only. Existing amounts are not live-converted and no exchange-rate API is used.</p><div class="currency-grid"><label>Currency<select id="lifeosCurrencySelect" onchange="setLifeOSCurrency(this.value)">${CURRENCIES.filter(x=>x&&x[0]).map(x=>`<option value="${esc(x[0])}" ${x[0]===code?'selected':''}>${esc(x[0])} — ${esc(x[1]||x[0])}</option>`).join('')}<option value="CUSTOM" ${code==='CUSTOM'?'selected':''}>CUSTOM — ${esc(info[1]||'¤')}</option></select></label><label>Custom Currency Symbol / Code<input id="customCurrencyInput" value="${esc(data.settings.customCurrency?.symbol||'¤')}" placeholder="e.g. ₿ or XYZ" onchange="setCustomCurrency(this.value)"></label></div><div class="currency-note" style="margin-top:7px">Default: NPR — रू · Includes INR, USD, EUR, GBP, JPY, CNY, AUD, CAD, AED, SAR, RUB and the broader ISO-style list.</div></div>
     <div class="card settings-card"><h2>🔄 Currency Converter</h2><p class="muted">Manual-rate converter: enter the rate as <b>1 From = X To</b>. No live exchange-rate API is used.</p><div class="currency-converter-grid"><label>From<select id="convFrom" onchange="convertCurrencyAmount()">${CURRENCIES.filter(x=>x&&x[0]).map(x=>`<option value="${esc(x[0])}" ${x[0]===code?'selected':''}>${esc(x[0])} — ${esc(x[1]||x[0])}</option>`).join('')}<option value="CUSTOM">CUSTOM — ${esc(info[1]||'¤')}</option></select></label><label>To<select id="convTo" onchange="convertCurrencyAmount()">${CURRENCIES.filter(x=>x&&x[0]).map(x=>`<option value="${esc(x[0])}" ${x[0]==='USD'?'selected':''}>${esc(x[0])} — ${esc(x[1]||x[0])}</option>`).join('')}<option value="CUSTOM">CUSTOM — ${esc(info[1]||'¤')}</option></select></label><label>Amount<input id="convAmount" type="number" step="any" min="0" value="1" oninput="convertCurrencyAmount()"></label><label>Rate (1 From = X To)<input id="convRate" type="number" step="any" min="0" value="1" oninput="convertCurrencyAmount()"></label></div><div id="convResult" class="currency-result" style="margin-top:9px">—</div></div>

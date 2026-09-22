@@ -1,12 +1,12 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "ॐ",
-  "version": "1.8.11",
+  "version": "1.8.25",
   "identifier": "com.lifeos.desktop",
   "bundle": {
     "android": {
       "minSdkVersion": 24,
-      "versionCode": 1008010
+      "versionCode": 1008025
     }
   }
 }
