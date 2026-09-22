@@ -1,6 +1,6 @@
 [package]
 name = "lifeos"
-version = "1.8.25"
+version = "1.8.30"
 description = "LifeOS — lightweight personal life management app"
 authors = ["LifeOS"]
 edition = "2021"
@@ -17,14 +17,20 @@ tauri = { version = "2", features = [] }
 rusqlite = { version = "0.32.1", features = ["bundled", "backup"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-tauri-plugin-fs = "2"
-
-[target."cfg(not(any(target_os = \"android\", target_os = \"ios\")))".dependencies]
-tauri-plugin-updater = "2.12.0"
 
 [target."cfg(windows)".dependencies]
 rfd = "0.15"
 
+[target.'cfg(target_os = "android")'.dependencies]
+tauri-plugin-android-fs = { version = "29.0.0", features = ["legacy_storage_permission"] }
+
 [features]
 default = ["custom-protocol"]
 custom-protocol = ["tauri/custom-protocol"]
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

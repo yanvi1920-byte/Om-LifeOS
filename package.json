@@ -1,7 +1,7 @@
 {
   "name": "lifeos-windows",
   "private": true,
-  "version": "1.8.26",
+  "version": "1.8.30",
   "scripts": {
     "dev": "tauri dev",
     "build": "tauri build",
@@ -11,8 +11,6 @@
     "@tauri-apps/cli": "2.11.0"
   },
   "dependencies": {
-    "@tauri-apps/api": "2.11.1",
-    "@tauri-apps/plugin-updater": "2.12.0",
-    "@tauri-apps/plugin-fs": "2.5.2"
+    "@tauri-apps/api": "2.11.1"
   }
 }

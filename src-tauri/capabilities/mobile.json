@@ -1,25 +1,15 @@
 {
   "$schema": "../gen/schemas/mobile-schema.json",
   "identifier": "mobile-capability",
-  "description": "Minimal mobile permissions for the main application window.",
+  "description": "Android storage, file picker, and filesystem permissions for the main application window.",
   "windows": [
     "main"
   ],
   "platforms": [
-    "android",
-    "iOS"
+    "android"
   ],
   "permissions": [
     "core:default",
-    "fs:default",
-    "fs:write-files",
-    {
-      "identifier": "fs:scope",
-      "allow": [
-        {
-          "path": "$DOWNLOAD/**/*"
-        }
-      ]
-    }
+    "android-fs:default"
   ]
 }

@@ -1,4 +1,4 @@
-# Om-LifeOS v1.8.25 — Final Fresh Build
+# Om-LifeOS v1.8.30 — Final Fresh Build
 
 Windows/GitHub/Tauri local-first LifeOS build.
 
