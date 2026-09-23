@@ -1,0 +1,14 @@
+{
+  "name": "om-lifeos",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Om LifeOS desktop application",
+  "scripts": {
+    "dev": "tauri dev",
+    "build": "tauri build",
+    "tauri": "tauri"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2"
+  }
+}
