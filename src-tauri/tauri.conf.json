@@ -1,10 +1,10 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Om LifeOS",
-  "version": "1.0.0",
+  "version": "4.3.3",
   "identifier": "com.omlifeos.desktop",
   "build": {
-    "frontendDist": "../"
+    "frontendDist": "../dist"
   },
   "app": {
     "withGlobalTauri": false,
