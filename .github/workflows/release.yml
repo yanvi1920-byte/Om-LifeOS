@@ -1,54 +1,32 @@
-name: Build Om LifeOS for Windows
+name: Node.js CI
 
 on:
   push:
-    tags:
-      - "v*"
-  release:
-    types: [published]
-  workflow_dispatch:
-
-permissions:
-  contents: write
+    branches:
+      - main
+      - master
+  pull_request:
+    branches:
+      - main
+      - master
 
 jobs:
-  build-windows:
-    name: Windows installer
+  build:
     runs-on: windows-latest
 
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
 
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
+      - name: Check Node.js and npm versions
+        run: |
+          node --version
+          npm --version
 
-      - name: Install frontend dependencies
-        run: npm ci
-
-      - name: Build Windows Tauri installer
-        uses: tauri-apps/tauri-action@v0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tagName: ${{ github.ref_name }}
-          releaseName: "Om LifeOS ${{ github.ref_name }}"
-          releaseBody: "Automated Om LifeOS Windows desktop build."
-          releaseDraft: true
-          prerelease: false
-          args: ""
-
-      - name: Upload Windows bundles
-        uses: actions/upload-artifact@v4
-        with:
-          name: Om-LifeOS-Windows
-          path: |
-            src-tauri/target/release/bundle/msi/*.msi
-            src-tauri/target/release/bundle/nsis/*.exe
-          if-no-files-found: error
+      - name: Install dependencies
+        run: npm install
