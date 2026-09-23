@@ -1,49 +1,100 @@
-<!doctype html><html lang="en"><head>
-<meta name="om-lifeos-master" content="Om-LifeOS Master v4.2 universal compact responsive final build">
-<meta name="om-lifeos-structure" content="Dashboard;Tasks & Planner;Routine & Habits;Goals & Strategy;Focus;Notes;Journal;Finance;Calculator & Tools;Health;Work & Learning;People & Relationships;Values & Spiritual;Things & Documents;Settings">
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; font-src 'self' data:; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'self';"><title>Om-LifeOS 4.2.0 — Universal Compact Final</title>
-
-
-
-
-
-
-
-
-
-
-
-
-
-  <link rel="stylesheet" href="assets/app.css">
-</head><body>
-<div class="mobile-app-bar" id="mobileAppBar"><button aria-controls="mobileNavDrawer" aria-expanded="false" aria-label="Open navigation" id="mobileMenuButton" onclick="toggleMobileNav()" type="button">☰</button><div aria-hidden="true" class="mobile-brand-logo">ॐ</div><b class="mobile-brand-name">Om-LifeOS</b><span id="mobilePageTitle">Dashboard</span></div>
-<div class="mobile-nav-backdrop" id="mobileNavBackdrop" onclick="toggleMobileNav(false)"></div>
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Om-LifeOS</title>
+<style>
+:root{
+  --bg:#061426;--panel:#0a1b32cc;--panel2:#0d2340cc;--line:#24538b;
+  --text:#f4f7ff;--muted:#9fb4d2;--purple:#7146ff;--cyan:#20cfff;
+  --green:#21df9a;--pink:#ff3f9d;--orange:#ffad2f;
+}
+*{box-sizing:border-box} body{margin:0;background:radial-gradient(circle at 70% 0%,#162f5d 0,#061426 42%,#030b16 100%);color:var(--text);font:15px Segoe UI,Arial,sans-serif;min-height:100vh}
+button,input{font:inherit}.app{display:flex;min-height:100vh}.sidebar{width:300px;padding:18px 12px;border-right:1px solid #1b416e;background:#061426e8;backdrop-filter:blur(22px);position:sticky;top:0;height:100vh;overflow:auto}
+.brand{display:flex;gap:12px;align-items:center;padding:4px 12px 18px;border-bottom:1px solid #183b64}.om{width:54px;height:54px;border:1px solid #a8751e;border-radius:50%;display:grid;place-items:center;font-size:34px;color:#ffb52c;background:#15243a}.brand b{font-size:21px}.brand small{display:block;color:#9db1cf;margin-top:3px}
+nav{padding-top:12px}.section{margin:10px 8px 6px;color:#6f8baa;font-size:11px;text-transform:uppercase;letter-spacing:1.5px}.item{width:100%;border:0;background:transparent;color:#dfe9fa;text-align:left;padding:12px 14px;border-radius:12px;cursor:pointer;margin:2px 0;display:flex;gap:12px;align-items:center;font-weight:600}.item:hover{background:#10294a}.item.active{background:linear-gradient(90deg,#6d43ed,#40307e);box-shadow:inset 0 0 0 1px #9a79ff;color:#fff}.ico{width:23px;text-align:center;font-size:18px}.sidebottom{margin-top:18px;padding-top:12px;border-top:1px solid #183b64}
+.main{flex:1;padding:18px;min-width:0}.top{display:flex;gap:14px;align-items:center;margin-bottom:18px}.search{flex:1;max-width:560px;background:#102b50;border:1px solid #245486;border-radius:28px;padding:12px 18px;color:#dbeaff;outline:none}.topright{margin-left:auto;display:flex;gap:20px;align-items:center;color:#dce9ff}.card{background:linear-gradient(145deg,#0d2340e8,#07182ee8);border:1px solid #24558c;border-radius:16px;box-shadow:0 14px 35px #0005;backdrop-filter:blur(18px)}.hero{height:194px;position:relative;overflow:hidden;background:#0b1d34 url("assets/shiva-parvati-dashboard.png") center/cover no-repeat}.hero:after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,#07182eea 0%,#07182e88 48%,#07182e22 100%)}.heroText{position:relative;z-index:1;padding:25px}.hero h1{margin:6px 0;font-size:35px}.hero p{color:#d7e3f5;font-size:16px}.clock{position:absolute;right:20px;top:26px;z-index:2;background:#09182ccc;padding:16px 22px;border-radius:15px;text-align:right;border:1px solid #ffffff24}.clock b{font-size:32px}.grid{display:grid;grid-template-columns:1.25fr .9fr .75fr;gap:14px;margin-top:14px}.wide{grid-column:span 2}.cardhead{display:flex;justify-content:space-between;align-items:center;padding:15px 17px;border-bottom:1px solid #1b416a}.cardhead b{font-size:17px}.link{color:#36caff;cursor:pointer;font-size:13px}.tasks{padding:6px 17px 14px}.task{display:flex;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid #173657}.task:last-child{border:0}.task input{accent-color:#21df9a;width:18px;height:18px}.task.done span{text-decoration:line-through;color:#7188a8}.add{background:#7146ff;color:#fff;border:0;border-radius:20px;padding:8px 14px;cursor:pointer}.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;padding:12px}.stat{background:#0c2850;border-radius:12px;padding:12px;text-align:center}.stat strong{display:block;font-size:23px}.stat small{color:#9bb1ce}.bar{height:8px;background:#173455;border-radius:9px;overflow:hidden;margin:8px 0}.fill{height:100%;border-radius:9px;background:linear-gradient(90deg,#22d8ff,#7c4dff)}.content{padding:14px 17px}.habitrow{display:flex;justify-content:space-around;text-align:center}.habit{font-size:25px}.habit small{display:block;font-size:12px;color:#9fb4d2;margin-top:5px}.mini-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:14px}.metric{padding:16px}.metric h3{margin:0 0 8px}.metric .big{font-size:27px;color:#21df9a}.fab{position:fixed;right:25px;bottom:25px;border:0;border-radius:50%;width:54px;height:54px;background:#7146ff;color:#fff;font-size:25px;box-shadow:0 8px 25px #0008;cursor:pointer}
+@media(max-width:1000px){.sidebar{width:240px}.grid{grid-template-columns:1fr 1fr}.wide{grid-column:span 2}.mini-grid{grid-template-columns:1fr 1fr}}
+@media(max-width:720px){.sidebar{display:none}.grid,.mini-grid{grid-template-columns:1fr}.wide{grid-column:auto}.topright{display:none}}
+</style>
+</head>
+<body>
 <div class="app">
-<aside class="side" id="mobileNavDrawer"><div class="sidebar-top-tools"><button type="button" class="sidebar-theme-toggle" id="sidebarThemeToggle" onclick="toggleTheme()" aria-label="Switch theme" title="Switch theme">☾</button><span class="muted">v4.7</span></div><div class="brand"><div aria-hidden="true" class="brand-logo">ॐ</div><div><b>Om-LifeOS</b><small>Personal life management</small></div></div><nav aria-label="LifeOS navigation" id="nav"></nav></aside>
-<main class="main"><header class="top"><div style="min-width:180px"><h1 id="pageTitle">Dashboard</h1><div class="sub">Your complete local-first life system.</div></div><input class="top-search" id="search" placeholder="Search everything…" oninput="searchAll(this.value)" aria-label="Search everything"><button type="button" id="bsDateWidget" class="bs-date-widget" title="Nepali BS date • click for BS ↔ AD converter" aria-label="Nepali Bikram Sambat date" onclick="openBsDatePanel()"><span class="bs-date-widget-main" id="bsDateWidgetMain">BS —</span><span class="bs-date-widget-ad" id="bsDateWidgetAd">AD —</span></button><div class="top-actions">
-  <button type="button" class="top-icon-action" title="Notifications" aria-label="Notifications" onclick="show('settings');setTimeout(()=>document.getElementById('settingsNotificationsCard')?.scrollIntoView({behavior:'smooth',block:'center'}),0)">🔔</button>
-  <button type="button" class="top-icon-action" title="Achievements" aria-label="Achievements" onclick="show('dashboard');setTimeout(()=>document.querySelector('[data-dashboard-achievements]')?.scrollIntoView({behavior:'smooth',block:'center'}),0)">🏆</button>
-  <button type="button" class="top-capture-action" onclick="capture()">＋ Capture</button>
-  <div class="command-menu-wrap">
-    <button class="command-menu-trigger" id="commandMenuTrigger" type="button" aria-expanded="false" aria-haspopup="menu" onclick="toggleCommandMenu()">⚡ Actions <span aria-hidden="true">⌄</span></button>
-    <div class="command-menu" id="commandMenu" role="menu" aria-label="Quick actions">
-      <button type="button" role="menuitem" onclick="capture();toggleCommandMenu(false)">＋ Quick Capture</button>
-      <button type="button" role="menuitem" onclick="show('tasks');toggleCommandMenu(false)">✓ Tasks & Planner</button>
-      <button type="button" role="menuitem" onclick="show('notes');toggleCommandMenu(false)">📝 Notes</button>
-      <button type="button" role="menuitem" onclick="show('finance');toggleCommandMenu(false)">💰 Finance</button>
-      <button type="button" role="menuitem" onclick="show('settings');toggleCommandMenu(false)">⚙ Settings</button>
-    </div>
+<aside class="sidebar">
+  <div class="brand"><div class="om">ॐ</div><div><b>Om-LifeOS</b><small>Personal life management</small></div></div>
+  <nav id="nav">
+    <button class="item active" data-page="Dashboard"><span class="ico">🏠</span>Dashboard</button>
+    <button class="item" data-page="Tasks & Planner"><span class="ico">✅</span>Tasks & Planner</button>
+    <button class="item" data-page="Routine & Habits"><span class="ico">🔄</span>Routine & Habits</button>
+    <button class="item" data-page="Goals & Strategy"><span class="ico">🎯</span>Goals & Strategy</button>
+    <button class="item" data-page="Focus"><span class="ico">⏱️</span>Focus</button>
+    <button class="item" data-page="Notes"><span class="ico">📝</span>Notes</button>
+    <button class="item" data-page="Journal"><span class="ico">📓</span>Journal</button>
+    <button class="item" data-page="Calculator & Tools"><span class="ico">🧮</span>Calculator & Tools</button>
+    <button class="item" data-page="Finance"><span class="ico">💰</span>Finance</button>
+    <button class="item" data-page="Health"><span class="ico">💗</span>Health</button>
+    <button class="item" data-page="Work & Learning"><span class="ico">💼</span>Work & Learning</button>
+    <button class="item" data-page="People & Relationships"><span class="ico">🤝</span>People & Relationships</button>
+    <button class="item" data-page="Values & Spiritual"><span class="ico">ॐ</span>Values & Spiritual</button>
+    <button class="item" data-page="Things & Documents"><span class="ico">📁</span>Things & Documents</button>
+  </nav>
+  <div class="sidebottom"><button class="item" data-page="Settings"><span class="ico">⚙️</span>Settings</button></div>
+</aside>
+
+<main class="main">
+  <div class="top">
+    <input class="search" id="search" placeholder="🔍  Search anything...">
+    <div class="topright"><span id="date"></span><span>☀️ 28°C</span><span>🔔</span><span>👤</span></div>
   </div>
-</div></header><div id="content" class="content"></div></main>
+
+  <section class="card hero">
+    <div class="heroText"><div>Good Morning,</div><h1>Om LifeOS ॐ</h1><p>“Shiv ka saath, har kadam par shakti deta hai.”</p></div>
+    <div class="clock"><b id="clock">10:24 AM</b><br><span id="clockDate"></span></div>
+  </section>
+
+  <div class="grid">
+    <section class="card wide">
+      <div class="cardhead"><b>📋 Today's Tasks</b><button class="add" id="addTask">＋ Add Task</button></div>
+      <div class="tasks" id="tasks"></div>
+    </section>
+    <section class="card"><div class="cardhead"><b>📊 Quick Stats</b></div><div class="stats">
+      <div class="stat"><strong id="total">0</strong><small>Total</small></div><div class="stat"><strong id="done">0</strong><small>Completed</small></div><div class="stat"><strong id="pending">0</strong><small>Pending</small></div><div class="stat"><strong id="overdue">0</strong><small>Overdue</small></div>
+    </div></section>
+
+    <section class="card"><div class="cardhead"><b>🔥 Habit Streaks</b><span class="link">View All</span></div><div class="content habitrow">
+      <div><div class="habit">🧘</div><small>Meditation<br>12 days</small></div><div><div class="habit">🏋️</div><small>Exercise<br>8 days</small></div><div><div class="habit">📖</div><small>Reading<br>15 days</small></div><div><div class="habit">🚫</div><small>No Sugar<br>6 days</small></div>
+    </div></section>
+    <section class="card"><div class="cardhead"><b>📈 Productivity</b></div><div class="content"><b>Overall 68%</b><div class="bar"><div class="fill" style="width:68%"></div></div><small>Focus 80% · Tasks 65% · Learning 45% · Health 70%</small></div></section>
+
+    <section class="card"><div class="cardhead"><b>📝 Notes</b><span class="link">View All</span></div><div class="content">📄 My Goals for 2025<br><br>💙 Health & Fitness Plan<br><br>💡 Business Ideas</div></section>
+    <section class="card"><div class="cardhead"><b>📅 Calendar</b><span class="link">View Calendar</span></div><div class="content"><b>Mon 21 · Tue 22 · Wed 23 · Thu 24</b><p>10:00 AM · Team Meeting</p><p>02:00 PM · Study Session</p><p>06:00 PM · Family Time</p></div></section>
+  </div>
+
+  <div class="mini-grid">
+    <section class="card metric"><h3>🎯 Goals Progress</h3><div>Career Growth <b>70%</b><div class="bar"><div class="fill" style="width:70%"></div></div></div><div>Financial Freedom <b>45%</b><div class="bar"><div class="fill" style="width:45%"></div></div></div></section>
+    <section class="card metric"><h3>💰 Finance Overview</h3><div class="big">₹ 1,24,500</div><small>Balance · Income ₹68,000 · Expenses ₹42,300</small></section>
+    <section class="card metric"><h3>💗 Health Overview</h3><div class="big">78%</div><small>Steps 8,450 · Sleep 7h 30m · Calories 2,340</small></section>
+  </div>
+</main>
 </div>
-<div class="mobile-bottom-nav" id="mobileBottomNav"><button data-bottom-nav="dashboard" onclick="show('dashboard')"><span class="mi">⌂</span><span>Home</span></button><button data-bottom-nav="tasks" onclick="show('tasks')"><span class="mi">✓</span><span>Tasks</span></button><button data-bottom-nav="routine" onclick="show('routine')"><span class="mi">◉</span><span>Habits</span></button><button data-bottom-nav="notes" onclick="show('notes')"><span class="mi">▤</span><span>Notes</span></button><button data-bottom-nav="settings" onclick="show('settings')"><span class="mi">⚙</span><span>More</span></button><button class="bottom-theme" id="bottomThemeToggle" onclick="toggleTheme()" aria-label="Switch theme" title="Switch theme"><span class="mi">☾</span><span>Theme</span></button></div>
-
-<div id="bsDateModal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="bsDateModalTitle" onclick="if(event.target===this)closeBsDatePanel()"><div class="bs-date-panel"><div class="modal-head"><div><h2 id="bsDateModalTitle">🇳🇵 BS ↔ AD Date</h2><div class="muted">Bikram Sambat and Gregorian dates stay linked automatically.</div></div><button type="button" class="secondary" onclick="closeBsDatePanel()">Close</button></div><div class="bs-date-panel-grid" style="margin-top:10px"><label><span class="label">BS date</span><input id="bsDateInput" type="text" inputmode="numeric" placeholder="2083-06-08" aria-label="BS date YYYY-MM-DD"></label><label><span class="label">AD date</span><input id="adDateInput" type="date" aria-label="AD date"></label></div><div class="actions" style="margin-top:9px"><button type="button" class="primary" onclick="convertBsToAdUi()">BS → AD</button><button type="button" class="secondary" onclick="convertAdToBsUi()">AD → BS</button><button type="button" class="secondary" onclick="setBsTodayUi()">Today</button></div><div id="bsDateResult" class="bs-date-panel-result" aria-live="polite"></div></div></div>
-<div id="toast" class="toast"></div><div id="entityModal" class="modal-backdrop" onclick="if(event.target===this)closeEntityModal()"></div>
-
-
-
-
-  <script src="assets/app.js"></script>
-</body></html>
+<button class="fab" id="fab">＋</button>
+<script>
+const seed=[["Morning Meditation","07:00 AM",true],["Read 20 Pages","08:00 AM",true],["Workout / Exercise","09:00 AM",true],["Finish Project","11:00 AM",false],["Plan Tomorrow","08:00 PM",false]];
+let tasks=JSON.parse(localStorage.getItem("omlifeos_tasks")||"null")||seed.map(x=>({text:x[0],time:x[1],done:x[2]}));
+const save=()=>localStorage.setItem("omlifeos_tasks",JSON.stringify(tasks));
+function renderTasks(){
+  const el=document.getElementById("tasks"); el.innerHTML="";
+  tasks.forEach((t,i)=>{const row=document.createElement("label");row.className="task "+(t.done?"done":"");row.innerHTML=`<input type="checkbox" ${t.done?"checked":""}><span>${t.text}</span><small style="margin-left:auto;color:#8fa8c8">${t.time}</small><button title="Delete" style="border:0;background:none;color:#8fa8c8;cursor:pointer">⋮</button>`;
+  row.querySelector("input").onchange=()=>{t.done=!t.done;save();renderTasks()}; row.querySelector("button").onclick=e=>{e.preventDefault();tasks.splice(i,1);save();renderTasks()};el.appendChild(row)});
+  const done=tasks.filter(t=>t.done).length;document.getElementById("total").textContent=tasks.length;document.getElementById("done").textContent=done;document.getElementById("pending").textContent=tasks.length-done;document.getElementById("overdue").textContent=0;
+}
+function tick(){const d=new Date();document.getElementById("clock").textContent=d.toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"});document.getElementById("clockDate").textContent=d.toLocaleDateString([], {weekday:"long",day:"numeric",month:"long",year:"numeric"});document.getElementById("date").textContent=d.toLocaleDateString([], {weekday:"long",day:"numeric",month:"short",year:"numeric"})}
+document.querySelectorAll(".item").forEach(b=>b.onclick=()=>{document.querySelectorAll(".item").forEach(x=>x.classList.remove("active"));b.classList.add("active")});
+document.getElementById("addTask").onclick=()=>{const text=prompt("New task:");if(text?.trim()){tasks.push({text:text.trim(),time:"Anytime",done:false});save();renderTasks()}};
+document.getElementById("fab").onclick=()=>document.getElementById("addTask").click();
+document.getElementById("search").oninput=e=>{const q=e.target.value.toLowerCase();document.querySelectorAll(".task").forEach(x=>x.style.display=x.textContent.toLowerCase().includes(q)?"flex":"none")};
+renderTasks();tick();setInterval(tick,1000);
+</script>
+</body>
+</html>
