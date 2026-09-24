@@ -618,24 +618,68 @@ document.addEventListener('keydown',e=>{if(e.key==='Escape')toggleCommandMenu(fa
 
 function show(id){
   const navToken=++navigationEpoch;
-  state.active=id;renderNav();toggleMobileNav(false);
-  document.querySelectorAll('#mobileBottomNav button[data-bottom-nav]').forEach(b=>b.classList.toggle('active',b.dataset.bottomNav===id));
-  render();history.replaceState(null,'','#'+id);
+
+  try{
+    state.active=id;
+    renderNav();
+    toggleMobileNav(false);
+
+    document
+      .querySelectorAll('#mobileBottomNav button[data-bottom-nav]')
+      .forEach(b=>{
+        b.classList.toggle('active',b.dataset.bottomNav===id);
+      });
+
+    render();
+    history.replaceState(null,'','#'+id);
+
+  }catch(e){
+    console.error('Navigation render failed:',id,e);
+    toast('Page could not be opened');
+    return;
+  }
+
   const keys=LAZY_MODULES[id]||[];
   if(!keys.length)return;
+
   const requested=id;
+
   Promise.resolve().then(async()=>{
     try{
       let flight=moduleHydrationFlights.get(requested);
+
       if(!flight){
-        flight=db.hydrate(keys).finally(()=>{if(moduleHydrationFlights.get(requested)===flight)moduleHydrationFlights.delete(requested)});
+        flight=db.hydrate(keys).finally(()=>{
+          if(moduleHydrationFlights.get(requested)===flight){
+            moduleHydrationFlights.delete(requested);
+          }
+        });
+
         moduleHydrationFlights.set(requested,flight);
       }
+
       await flight;
-      if(state.active===requested&&navigationEpoch===navToken)render();
+
+      if(
+        state.active===requested &&
+        navigationEpoch===navToken
+      ){
+        render();
+      }
+
       scheduleIntegrityAudit(1200,keys);
-    }catch(e){console.warn('Module hydration failed',requested,e);if(state.active===requested&&navigationEpoch===navToken)toast('Module data could not be loaded');}
- });
+
+    }catch(e){
+      console.error('Module hydration failed:',requested,e);
+
+      if(
+        state.active===requested &&
+        navigationEpoch===navToken
+      ){
+        toast('Module data could not be loaded');
+      }
+    }
+  });
 }
 
 window.show = show;
