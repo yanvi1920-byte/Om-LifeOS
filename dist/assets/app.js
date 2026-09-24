@@ -619,25 +619,20 @@ document.addEventListener('keydown',e=>{if(e.key==='Escape')toggleCommandMenu(fa
 function show(id){
   const navToken=++navigationEpoch;
 
-  state.active=id;
-  renderNav();
-
-  if(typeof toggleMobileNav==='function'){
-    toggleMobileNav(false);
-  }
-
-  document
-    .querySelectorAll('#mobileBottomNav button[data-bottom-nav]')
-    .forEach(b=>{
-      b.classList.toggle(
-        'active',
-        b.dataset.bottomNav===id
-      );
-    });
-
   try{
+    state.active=id;
+    renderNav();
+    toggleMobileNav(false);
+
+    document
+      .querySelectorAll('#mobileBottomNav button[data-bottom-nav]')
+      .forEach(b=>{
+        b.classList.toggle('active',b.dataset.bottomNav===id);
+      });
+
     render();
     history.replaceState(null,'','#'+id);
+
   }catch(e){
     console.error('Navigation render failed:',id,e);
     toast('Page could not be opened');
