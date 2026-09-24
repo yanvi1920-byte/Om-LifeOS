@@ -619,20 +619,25 @@ document.addEventListener('keydown',e=>{if(e.key==='Escape')toggleCommandMenu(fa
 function show(id){
   const navToken=++navigationEpoch;
 
-  try{
-    state.active=id;
-    renderNav();
+  state.active=id;
+  renderNav();
+
+  if(typeof toggleMobileNav==='function'){
     toggleMobileNav(false);
+  }
 
-    document
-      .querySelectorAll('#mobileBottomNav button[data-bottom-nav]')
-      .forEach(b=>{
-        b.classList.toggle('active',b.dataset.bottomNav===id);
-      });
+  document
+    .querySelectorAll('#mobileBottomNav button[data-bottom-nav]')
+    .forEach(b=>{
+      b.classList.toggle(
+        'active',
+        b.dataset.bottomNav===id
+      );
+    });
 
+  try{
     render();
     history.replaceState(null,'','#'+id);
-
   }catch(e){
     console.error('Navigation render failed:',id,e);
     toast('Page could not be opened');
@@ -2111,114 +2116,6 @@ startupHydrationPromise=Promise.resolve().then(async()=>{
     @media(max-width:800px){.note-filter-bar{grid-template-columns:1fr}.calc-tools{grid-template-columns:repeat(2,minmax(0,1fr))}.quick-capture-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:520px){.calc-tools{grid-template-columns:1fr}.quick-capture-grid{grid-template-columns:1fr}}
   `;document.head.appendChild(style);
 })();
-
-
-
-/* ==========================================================
-   Om-LifeOS — Permanent Semantic Card Rows
-   ----------------------------------------------------------
-   Cards are grouped into intentional rows from their existing
-   span classes. No absolute positioning, no masonry, no dense
-   packing and no measured row-span hacks. Every row owns its
-   own height, so a tall card cannot create a hole beside cards
-   that belong to another row.
-   ========================================================== */
-(function(){
-  'use strict';
-  let raf=0, busy=false, ro=null, mo=null;
-
-  function roots(){
-    return [...document.querySelectorAll('#content .grid')].filter(el=>!el.parentElement?.closest('.grid'));
-  }
-  function spanOf(el){
-    const m=String(el.className||'').match(/\bspan(3|4|5|6|7|8|12)\b/);
-    return m?Number(m[1]):12;
-  }
-  function columns(root){
-    const w=root.clientWidth||0;
-    if(w<=760)return 1;
-    if(w<=1100)return 6;
-    return 12;
-  }
-  function effectiveSpan(el, cols){
-    if(cols===1)return 1;
-    const n=spanOf(el);
-    if(cols===6)return n>=5?6:3;
-    return Math.min(12,n);
-  }
-  function restore(root){
-    const rows=[...root.children].filter(el=>el.classList?.contains('ol-card-row'));
-    for(const row of rows){
-      while(row.firstChild)root.insertBefore(row.firstChild,row);
-      row.remove();
-    }
-  }
-  function apply(root){
-    if(!root.isConnected)return;
-    restore(root);
-    const cols=columns(root);
-    const items=[...root.children].filter(el=>el instanceof HTMLElement && !el.matches('script,style,template') && !el.classList.contains('layout-ignore'));
-    if(!items.length)return;
-
-    root.classList.add('ol-semantic-card-grid');
-    root.style.display='block';
-    root.style.marginBottom='8px';
-    root.style.minWidth='0';
-
-    let row=null, used=0;
-    for(const item of items){
-      let sp=effectiveSpan(item,cols);
-      if(sp>cols)sp=cols;
-      if(!row || used+sp>cols){
-        row=document.createElement('div');
-        row.className='ol-card-row';
-        row.dataset.cols=String(cols);
-        row.style.setProperty('--ol-row-cols',String(cols));
-        root.appendChild(row);
-        used=0;
-      }
-      item.style.gridColumn=`span ${sp}`;
-      row.appendChild(item);
-      used+=sp;
-    }
-  }
-  function run(){
-    if(busy)return;
-    busy=true;
-    if(mo)mo.disconnect();
-    try{roots().forEach(apply);}finally{
-      if(mo)mo.observe(document.getElementById('content')||document.body,{subtree:true,childList:true});
-      busy=false;
-    }
-  }
-  function schedule(){
-    cancelAnimationFrame(raf);
-    raf=requestAnimationFrame(run);
-  }
-  window.scheduleUltimateLayout=schedule;
-  window.OmLifeOSMenuLayout={layout:run,schedule};
-  function init(){
-    schedule();
-    const target=document.getElementById('content')||document.body;
-    if(typeof ResizeObserver!=='undefined'){
-      ro=new ResizeObserver(()=>schedule());
-      ro.observe(target);
-    }
-    if(typeof MutationObserver!=='undefined'){
-      mo=new MutationObserver(records=>{
-        if(busy)return;
-        if(records.some(r=>r.addedNodes.length||r.removedNodes.length))schedule();
-      });
-      mo.observe(target,{subtree:true,childList:true});
-    }
-    if(document.fonts?.ready)document.fonts.ready.then(schedule).catch(()=>{});
-    addEventListener('resize',schedule,{passive:true});
-    addEventListener('orientationchange',schedule,{passive:true});
-  }
-  if(document.readyState==='loading')addEventListener('DOMContentLoaded',init,{once:true});
-  else init();
-})();
-
 
 /* ================= OM-LIFEOS ARCHITECTURE CONTRACT v4.7 =================
    Semantic contracts are kept explicit so legacy records remain usable while
