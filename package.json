@@ -1,6 +1,6 @@
 {
   "name": "om-lifeos",
-  "version": "4.5.1",
+  "version": "4.5.2",
   "private": true,
   "description": "Om LifeOS desktop application",
   "scripts": {
