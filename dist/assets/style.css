@@ -1112,3 +1112,82 @@ html[data-lifeos-mode="dark"] .focus-image-stat b{color:var(--text)}
 .grid.om-semantic-card-grid>.ol-card-row>.note-list{position:relative!important;left:auto!important;top:auto!important;width:auto!important;max-width:none!important;min-width:0!important;margin:0!important;align-self:start!important;box-sizing:border-box!important}
 @media(max-width:1100px){.grid.om-semantic-card-grid>.ol-card-row{grid-template-columns:repeat(6,minmax(0,1fr))!important}}
 @media(max-width:760px){.grid.om-semantic-card-grid>.ol-card-row{grid-template-columns:1fr!important;gap:6px!important;margin-bottom:6px!important}.grid.om-semantic-card-grid>.ol-card-row>.card,.grid.om-semantic-card-grid>.ol-card-row>.panel,.grid.om-semantic-card-grid>.ol-card-row>.note-editor,.grid.om-semantic-card-grid>.ol-card-row>.note-list{grid-column:1!important}}
+/* FINAL RESPONSIVE NAVIGATION */
+
+@media (max-width:1050px){
+
+  .mobile-app-bar{
+    position:fixed!important;
+    left:0!important;
+    right:0!important;
+    top:0!important;
+    width:100%!important;
+    height:52px!important;
+    z-index:3000!important;
+  }
+
+  .mobile-app-bar button{
+    pointer-events:auto!important;
+  }
+
+  .side{
+    position:fixed!important;
+    left:0!important;
+    top:0!important;
+    bottom:0!important;
+    width:min(310px,88vw)!important;
+    height:100dvh!important;
+    z-index:2990!important;
+    transform:translate3d(-110%,0,0)!important;
+    visibility:hidden!important;
+    pointer-events:none!important;
+  }
+
+  .side.open{
+    transform:translate3d(0,0,0)!important;
+    visibility:visible!important;
+    pointer-events:auto!important;
+  }
+
+  .mobile-nav-backdrop{
+    position:fixed!important;
+    inset:0!important;
+    z-index:2980!important;
+    opacity:0!important;
+    visibility:hidden!important;
+    pointer-events:none!important;
+  }
+
+  .mobile-nav-backdrop.open{
+    opacity:1!important;
+    visibility:visible!important;
+    pointer-events:auto!important;
+  }
+
+  .app{
+    padding-top:52px!important;
+  }
+}
+
+/* DESKTOP */
+
+@media (min-width:1051px){
+
+  .mobile-app-bar,
+  .mobile-nav-backdrop{
+    display:none!important;
+  }
+
+  .side{
+    position:relative!important;
+    transform:none!important;
+    visibility:visible!important;
+    pointer-events:auto!important;
+  }
+
+  .app,
+  .side,
+  .main{
+    pointer-events:auto!important;
+  }
+}
