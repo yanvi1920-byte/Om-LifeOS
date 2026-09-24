@@ -635,8 +635,11 @@ function show(id){
       if(state.active===requested&&navigationEpoch===navToken)render();
       scheduleIntegrityAudit(1200,keys);
     }catch(e){console.warn('Module hydration failed',requested,e);if(state.active===requested&&navigationEpoch===navToken)toast('Module data could not be loaded');}
-  });
+ });
 }
+
+window.show = show;
+
 function card(title,body,cls='span12'){return `<section class="card ${cls}"><h2>${title}</h2>${body}</section>`}
 
 const CALCULATOR_CATALOG=Object.freeze({quick:['Basic','Scientific','Percentage','Fraction','Ratio','Average','Discount','Tip','Bill Split','Tax'],money:['EMI / Loan','Simple Interest','Compound Interest','SIP / Investment','Savings','ROI','Profit & Loss','Inflation','Salary','Markup','Margin','Break-even','CAGR','Growth','Pricing'],gold:['Gold Value','Gold Rate × Weight','Gold Weight Converter','Karat ↔ Purity','Pure Gold Weight','Jewellery Price','Making Charge','Wastage','GST / Tax','Buy / Sell Value','Silver Value'],health:['BMI','BMR','TDEE','Calories','Macros','Body Fat','Water Intake','Running Pace','Age','Ideal Body Weight'],time:['Date Difference','Age','Countdown','Working Days','Date Add / Subtract','Time Difference','Time Zone Offset','Unix Timestamp','Weekday'],converter:['Length','Weight','Area','Volume','Temperature','Speed','Time','Energy','Pressure','Power','Data Size','Currency','Nepal Land','Nepal Length','Nepal Volume','Nepal Weight'],home:['Room Area','Paint','Flooring','Tiles','Construction','Electricity Cost','Water Usage'],vehicle:['Mileage','Fuel Cost','Trip Fuel','Running Cost','Vehicle Loan','Fuel Economy'],travel:['Trip Budget','Distance','Travel Time','Fuel Budget','Travel Currency','Travel Time Zone'],business:['Revenue','Margin','Markup','Break-even','CAGR','Business ROI','Growth','Pricing'],programmer:['Binary','Decimal','Hexadecimal','Octal','Base Converter','Bitwise','Modulo','Data Size','Unix Timestamp','IP / Subnet']});
