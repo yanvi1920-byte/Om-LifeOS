@@ -15,8 +15,8 @@
         "title": "Om-LifeOS — Personal Operating System",
         "width": 1280,
         "height": 840,
-        "minWidth": 960,
-        "minHeight": 640,
+        "minWidth": 360,
+        "minHeight": 500,
         "resizable": true,
         "fullscreen": false,
         "maximized": true
