@@ -21,7 +21,6 @@ import { GlobalSearchModal } from './components/GlobalSearchModal';
 import { BsDateModal } from './components/BsDateModal';
 import { MultiUserModal } from './components/MultiUserModal';
 import { ComputerFolderBackupModal } from './components/ComputerFolderBackupModal';
-import { WindowsExeModal } from './components/WindowsExeModal';
 
 // Views
 import { DashboardView } from './views/DashboardView';
@@ -43,6 +42,7 @@ import { SettingsView } from './views/SettingsView';
 export default function App() {
   const [activeModule, setActiveModule] = useState<NavModule>('dashboard');
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
+  const [appearanceMode, setAppearanceMode] = useState<'normal' | 'glass'>('normal');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
@@ -53,7 +53,6 @@ export default function App() {
   const [isBsModalOpen, setIsBsModalOpen] = useState(false);
   const [isMultiUserOpen, setIsMultiUserOpen] = useState(false);
   const [isComputerBackupModalOpen, setIsComputerBackupModalOpen] = useState(false);
-  const [isWindowsExeOpen, setIsWindowsExeOpen] = useState(false);
 
   // Entities state
   const [appSettings, setAppSettings] = useState<AppState | undefined>();
@@ -231,6 +230,7 @@ export default function App() {
         if (settingsData.themeMode) {
           setTheme(settingsData.themeMode);
         }
+        setAppearanceMode(settingsData.appearanceMode || 'normal');
       }
 
       setTasks([...tasksData]);
@@ -348,6 +348,16 @@ export default function App() {
     await storage.setSingleton('appSettings', settingsObj);
   };
 
+  const toggleAppearanceMode = async (mode: 'normal' | 'glass') => {
+    setAppearanceMode(mode);
+    const settingsObj = (await storage.getSingleton<AppState>('appSettings')) || ({
+      profileId: 'default', profiles: [], themeMode: theme, accentColor: '#5d57c9',
+      notificationsEnabled: true, noteCategories: ['General'], calcFavorites: []
+    } as AppState);
+    settingsObj.appearanceMode = mode;
+    await storage.setSingleton('appSettings', settingsObj);
+  };
+
   const handleToggleTask = async (id: string) => {
     const t = tasks.find(x => x.id === id);
     if (!t) return;
@@ -386,7 +396,7 @@ export default function App() {
   const categoriesList = appSettings?.noteCategories || ['General', 'Strategy', 'Projects', 'Finance', 'Ideas'];
 
   return (
-    <div className="flex min-h-screen flex-col bg-slate-50 font-sans text-slate-900 selection:bg-indigo-500 selection:text-white dark:bg-slate-950 dark:text-slate-100">
+    <div className={`flex min-h-screen flex-col font-sans text-slate-900 selection:bg-indigo-500 selection:text-white dark:text-slate-100 ${appearanceMode === 'glass' ? 'glass-mode' : 'bg-slate-50 dark:bg-slate-950'}`}>
       {/* Top Bar */}
       <Header
         activeModule={activeModule}
@@ -399,7 +409,6 @@ export default function App() {
         onOpenBsModal={() => setIsBsModalOpen(true)}
         onOpenMultiUser={() => setIsMultiUserOpen(true)}
         onOpenComputerBackup={() => setIsComputerBackupModalOpen(true)}
-        onOpenWindowsExe={() => setIsWindowsExeOpen(true)}
         theme={theme}
         onToggleTheme={toggleTheme}
         profiles={appSettings?.profiles || [{ id: 'default', name: 'Primary Workspace', createdAt: Date.now() }]}
@@ -607,8 +616,9 @@ export default function App() {
                 onError={msg => showToast(`⚠️ ${msg}`)}
                 theme={theme}
                 onToggleTheme={toggleTheme}
-                onOpenWindowsExe={() => setIsWindowsExeOpen(true)}
-              />
+                appearanceMode={appearanceMode}
+                onToggleAppearance={toggleAppearanceMode}
+                      />
             )}
           </div>
         </main>
@@ -656,11 +666,6 @@ export default function App() {
         onError={msg => showToast(`⚠️ ${msg}`)}
       />
 
-      {/* Windows .exe (GitHub Actions) Builder & Guide Modal */}
-      <WindowsExeModal
-        isOpen={isWindowsExeOpen}
-        onClose={() => setIsWindowsExeOpen(false)}
-      />
 
       {/* Toast Notification */}
       {toastMessage && (

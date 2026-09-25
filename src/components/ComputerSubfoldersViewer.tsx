@@ -35,7 +35,6 @@ export const ALL_DOMAIN_SUBFOLDERS: DomainFolderSpec[] = [
     badgeBg: 'bg-amber-100 dark:bg-amber-950/60',
     badgeText: 'text-amber-800 dark:text-amber-300',
     files: [
-      { name: 'om_lifeos_offline_dashboard.html', type: 'html', desc: 'Complete standalone interactive HTML dashboard. Double-click to open in any browser offline!' },
       { name: 'om_lifeos_master_backup.json', type: 'json', desc: 'Atomic full-database snapshot. Restore anytime from Settings.' },
       { name: 'backup_manifest.json', type: 'json', desc: 'Metadata manifest with total counts across all stores.' },
       { name: 'README.txt', type: 'txt', desc: 'Sovereign backup explanation & restoration instructions.' }

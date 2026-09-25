@@ -1,6 +1,5 @@
 import JSZip from 'jszip';
 import { storage, ENTITY_STORES, SINGLETON_STORES } from './storage';
-import { generateCompleteStandaloneHtml } from './htmlExport';
 
 export interface FolderSyncMeta {
   isConnected: boolean;
@@ -344,14 +343,6 @@ export async function syncAllFilesToComputerFolder(
     await writeTextFile(sub00, 'backup_manifest.json', JSON.stringify(manifest, null, 2));
     totalFilesWritten++;
 
-    const standaloneHtml = generateCompleteStandaloneHtml(data);
-    await writeTextFile(sub00, 'om_lifeos_offline_dashboard.html', standaloneHtml);
-    totalFilesWritten++;
-
-    // Write index.html at root folder for instant one-click offline browsing
-    await writeTextFile(dirHandle, 'index.html', standaloneHtml);
-    totalFilesWritten++;
-
     const readme = `Om-LifeOS Sovereign Computer Folder Backup
 =========================================
 Generated: ${timestamp}
@@ -361,9 +352,7 @@ This local folder contains your entire personal operating system data,
 organized cleanly into separate subfolders for every life domain.
 
 HOW TO USE THESE FILES:
-1. Complete Offline Dashboard: Double-click 'index.html' or
-   '00_Master_System_Backup/om_lifeos_offline_dashboard.html' in ANY browser
-   to open the full interactive dashboard offline with zero internet required.
+1. Complete System Backup: Use the JSON backup in '00_Master_System_Backup'.
 2. Complete System Restore: Use '00_Master_System_Backup/om_lifeos_master_backup.json'
    in Om-LifeOS -> Settings -> Restore Backup to instantly restore everything.
 3. Direct Markdown Browsing: Notes in '03_Notes_and_Notebooks' and Journal entries
@@ -650,10 +639,6 @@ export async function exportAllFilesAsZip(
       2
     )
   );
-
-  const standaloneHtml = generateCompleteStandaloneHtml(data);
-  sub00.file('om_lifeos_offline_dashboard.html', standaloneHtml);
-  zip.file('index.html', standaloneHtml);
 
   // 01_Tasks_and_Planner
   const sub01 = zip.folder('01_Tasks_and_Planner')!;

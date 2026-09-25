@@ -65,3 +65,48 @@
 .card-hover:hover {
   transform: translateY(-2px);
 }
+
+
+/* Optional Glass appearance. Normal mode keeps the existing surfaces unchanged. */
+.glass-mode {
+  background: radial-gradient(circle at top right, rgba(99, 102, 241, 0.10), transparent 35%),
+              radial-gradient(circle at bottom left, rgba(14, 165, 233, 0.08), transparent 30%),
+              transparent;
+}
+.glass-mode header,
+.glass-mode aside,
+.glass-mode main {
+  background-color: rgba(255, 255, 255, 0.42);
+  border-color: rgba(148, 163, 184, 0.30);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+.glass-mode .bg-white,
+.glass-mode .bg-slate-50,
+.glass-mode .bg-slate-900,
+.glass-mode .bg-slate-950 {
+  background-color: rgba(255, 255, 255, 0.48);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+.dark .glass-mode {
+  color-scheme: dark;
+}
+.dark .glass-mode header,
+.dark .glass-mode aside,
+.dark .glass-mode main,
+.dark .glass-mode .bg-white,
+.dark .glass-mode .bg-slate-50,
+.dark .glass-mode .bg-slate-900,
+.dark .glass-mode .bg-slate-950 {
+  background-color: rgba(15, 23, 42, 0.48);
+  border-color: rgba(100, 116, 139, 0.30);
+}
+@media (max-width: 767px) {
+  .glass-mode header, .glass-mode aside, .glass-mode main,
+  .glass-mode .bg-white, .glass-mode .bg-slate-50,
+  .glass-mode .bg-slate-900, .glass-mode .bg-slate-950 {
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+  }
+}

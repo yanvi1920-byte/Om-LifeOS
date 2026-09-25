@@ -761,6 +761,7 @@ export interface AppState {
     avatarUrl?: string;
   };
   themeMode: 'light' | 'dark';
+  appearanceMode?: 'normal' | 'glass';
   accentColor: string;
   notificationsEnabled: boolean;
   storageEstimate?: {

@@ -8,8 +8,6 @@ import {
   WarrantyItem, ReceiptItem, CertificateItem, ReminderItem, NotificationItem,
   AchievementItem, CalcHistoryItem, Attachment, AppState, UserProfile
 } from '../types';
-import { generateCompleteStandaloneHtml } from './exportHtml';
-export { generateCompleteStandaloneHtml };
 
 export const DB_NAME = 'om-lifeos-canonical-v4';
 export const DB_VERSION = 1;
@@ -883,19 +881,5 @@ export function exportToPdf(title: string, rows: (string | number)[][]) {
 
   const blob = new Blob([new TextEncoder().encode(pdf)], { type: 'application/pdf' });
   downloadBlob(blob, `${title.toLowerCase().replace(/\s+/g, '-')}-${new Date().toISOString().slice(0, 10)}.pdf`);
-}
-
-export async function exportToCompleteHtml(title: string = 'Om-LifeOS-Complete') {
-  const allData: Record<string, any> = {};
-  for (const storeName of ENTITY_STORES) {
-    allData[storeName] = await storage.getAll(storeName);
-  }
-  for (const storeName of SINGLETON_STORES) {
-    allData[storeName] = await storage.getSingleton(storeName);
-  }
-
-  const htmlContent = generateCompleteStandaloneHtml(allData);
-  const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' });
-  downloadBlob(blob, `${title.toLowerCase().replace(/\s+/g, '-')}-${new Date().toISOString().slice(0, 10)}.html`);
 }
 

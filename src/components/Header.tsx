@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Plus, Zap, Moon, Sun, Users, Calendar, ChevronDown, Check, Clock, HardDrive, FolderCheck, Globe, Download, Monitor } from 'lucide-react';
+import { Search, Plus, Zap, Moon, Sun, Users, Calendar, ChevronDown, Check, Clock, HardDrive, FolderCheck, Download } from 'lucide-react';
 import { NavModule, UserProfile } from '../types';
 import { adToBs, getTodayIso } from '../lib/nepaliDate';
 
@@ -11,7 +11,6 @@ interface HeaderProps {
   onOpenBsModal: () => void;
   onOpenMultiUser: () => void;
   onOpenComputerBackup?: () => void;
-  onOpenWindowsExe?: () => void;
   theme: 'light' | 'dark';
   onToggleTheme: () => void;
   profiles: UserProfile[];
@@ -27,7 +26,6 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenBsModal,
   onOpenMultiUser,
   onOpenComputerBackup,
-  onOpenWindowsExe,
   theme,
   onToggleTheme,
   profiles,
@@ -259,16 +257,6 @@ export const Header: React.FC<HeaderProps> = ({
                 >
                   <span>👥</span> Multi-User & Pairing
                 </button>
-                {onOpenWindowsExe && (
-                  <button
-                    type="button"
-                    onClick={() => { onOpenWindowsExe(); setIsActionsOpen(false); }}
-                    className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-950/40"
-                  >
-                    <Monitor className="h-3.5 w-3.5 text-blue-500" />
-                    <span>Windows .exe (GitHub)</span>
-                  </button>
-                )}
                 {onOpenComputerBackup && (
                   <button
                     type="button"
@@ -279,33 +267,10 @@ export const Header: React.FC<HeaderProps> = ({
                     <span>Computer Folder Backup</span>
                   </button>
                 )}
-                <a
-                  href="/om-lifeos-complete.html"
-                  download="om-lifeos-complete.html"
-                  onClick={() => setIsActionsOpen(false)}
-                  className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-emerald-600 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-950/40"
-                  title="Direct Download Standalone Complete HTML App"
-                >
-                  <Globe className="h-3.5 w-3.5 text-emerald-500" />
-                  <span>Direct Download HTML</span>
-                </a>
               </div>
             </>
           )}
         </div>
-
-        {/* Windows .exe GitHub Button (Desktop) */}
-        {onOpenWindowsExe && (
-          <button
-            type="button"
-            onClick={onOpenWindowsExe}
-            className="hidden 2xl:flex h-8 sm:h-9 items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50/70 px-2 sm:px-2.5 text-xs font-semibold text-blue-700 hover:bg-blue-100 dark:border-blue-900/60 dark:bg-blue-950/40 dark:text-blue-300 dark:hover:bg-blue-900/60 transition-colors"
-            title="Make Windows .exe using GitHub Actions"
-          >
-            <Monitor className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
-            <span>Windows .exe</span>
-          </button>
-        )}
 
         {/* Quick Computer Backup Button (Tablet/Desktop) */}
         {onOpenComputerBackup && (

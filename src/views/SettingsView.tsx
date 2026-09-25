@@ -3,9 +3,9 @@ import {
   Settings, Download, Upload, FileText, FileSpreadsheet,
   FileCode, Database, RefreshCw, Trash2, Users, Bell, ShieldCheck,
   Monitor, Palette, Copy, Check, Folder, FolderCheck, HardDrive,
-  Layers, CheckCircle2, AlertCircle, ChevronRight, Globe
+  Layers, CheckCircle2, AlertCircle, ChevronRight
 } from 'lucide-react';
-import { storage, exportToCsv, exportToDocx, exportToXlsx, exportToPdf, exportToCompleteHtml, generateUUID } from '../lib/storage';
+import { storage, exportToCsv, exportToDocx, exportToXlsx, exportToPdf, generateUUID } from '../lib/storage';
 import {
   isFileSystemAccessSupported,
   getConnectedFolderInfo,
@@ -26,7 +26,8 @@ interface SettingsViewProps {
   onError: (msg: string) => void;
   theme: 'light' | 'dark';
   onToggleTheme: () => void;
-  onOpenWindowsExe?: () => void;
+  appearanceMode: 'normal' | 'glass';
+  onToggleAppearance: (mode: 'normal' | 'glass') => void;
 }
 
 export const SettingsView: React.FC<SettingsViewProps> = ({
@@ -36,7 +37,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   onError,
   theme,
   onToggleTheme,
-  onOpenWindowsExe
+  appearanceMode,
+  onToggleAppearance,
 }) => {
   const [activeTab, setActiveTab] = useState<'system' | 'workspaces' | 'exports' | 'computer'>('system');
   const [newProfileName, setNewProfileName] = useState('');
@@ -326,14 +328,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     onSuccess('CSV spreadsheet downloaded');
   };
 
-  const handleExportCompleteHtml = async () => {
-    try {
-      await exportToCompleteHtml('Om-LifeOS-Complete');
-      onSuccess('Complete standalone single-file HTML (.html) generated & downloaded');
-    } catch (err: any) {
-      onError(`HTML export failed: ${err.message}`);
-    }
-  };
 
   const handleRunIntegrityAudit = async () => {
     setIsAuditing(true);
@@ -495,6 +489,15 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 >
                   ☾ Dark
                 </button>
+              </div>
+            </div>
+
+            <div className="border-t border-slate-100 pt-4 dark:border-slate-800">
+              <div className="text-xs font-bold text-slate-900 dark:text-white">Window Appearance</div>
+              <div className="text-[11px] text-slate-400 mt-0.5">Choose the window surface style manually.</div>
+              <div className="mt-2.5 flex rounded-xl border border-slate-200 bg-slate-50 p-1 text-xs dark:border-slate-700 dark:bg-slate-800 w-fit">
+                <button type="button" onClick={() => onToggleAppearance('normal')} className={`rounded-lg px-3 py-1.5 font-semibold transition-all ${appearanceMode === 'normal' ? 'bg-white shadow-sm text-slate-900 dark:bg-slate-700 dark:text-white' : 'text-slate-500'}`}>Normal</button>
+                <button type="button" onClick={() => onToggleAppearance('glass')} className={`rounded-lg px-3 py-1.5 font-semibold transition-all ${appearanceMode === 'glass' ? 'bg-white shadow-sm text-slate-900 dark:bg-slate-700 dark:text-white' : 'text-slate-500'}`}>Glass</button>
               </div>
             </div>
 
@@ -793,114 +796,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             </div>
           </div>
 
-          {/* Complete Standalone HTML Application */}
-          <div className="lg:col-span-12 rounded-3xl border border-indigo-200/90 bg-gradient-to-br from-indigo-50/70 via-white to-purple-50/40 p-6 shadow-sm dark:border-indigo-900/60 dark:from-indigo-950/30 dark:via-slate-900 dark:to-slate-900 space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-100 pb-4 dark:border-slate-800">
-              <div className="flex items-center gap-3.5">
-                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-tr from-indigo-600 to-violet-600 text-white shadow-md shadow-indigo-500/25 shrink-0">
-                  <Globe className="h-5 w-5" />
-                </div>
-                <div>
-                  <h2 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                    <span>Complete Standalone HTML App (.html)</span>
-                    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400">
-                      Single-File Offline
-                    </span>
-                  </h2>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                    Download this entire app as a single self-contained HTML file with all your live tasks, notes, journal, finances, and goals embedded. Opens directly in any browser on any phone or PC without internet or server.
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-2 shrink-0">
-                <a
-                  href="/om-lifeos-complete.html"
-                  download="om-lifeos-complete.html"
-                  className="flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-semibold text-white shadow-sm hover:bg-emerald-500 active:scale-98 transition-all cursor-pointer"
-                  title="Direct Download Standalone Complete HTML App"
-                >
-                  <Download className="h-4 w-4" />
-                  <span>Direct Download HTML (.html)</span>
-                </a>
-
-                <button
-                  type="button"
-                  onClick={handleExportCompleteHtml}
-                  className="flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-xs font-semibold text-white shadow-sm hover:bg-indigo-500 active:scale-98 transition-all cursor-pointer"
-                  title="Export live user data into standalone single-file HTML"
-                >
-                  <Globe className="h-4 w-4" />
-                  <span>Export Live Data HTML</span>
-                </button>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs text-slate-600 dark:text-slate-400 pt-1">
-              <div className="flex items-center gap-2">
-                <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
-                <span>Runs 100% offline on any device (double-click to open)</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
-                <span>Embedded search, light/dark theme, interactive tasks</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
-                <span>One-click full JSON backup & restorer built inside</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Windows .exe (Tauri & GitHub Actions) Desktop Application Card */}
-          <div className="lg:col-span-12 rounded-3xl border border-amber-200/90 bg-gradient-to-br from-amber-50/60 via-white to-indigo-50/40 p-6 shadow-sm dark:border-amber-900/60 dark:from-amber-950/20 dark:via-slate-900 dark:to-slate-900 space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-100 pb-4 dark:border-slate-800">
-              <div className="flex items-center gap-3.5">
-                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-tr from-amber-500 to-indigo-600 text-white shadow-md shadow-amber-500/25 shrink-0">
-                  <Monitor className="h-5 w-5" />
-                </div>
-                <div>
-                  <h2 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                    <span>Windows Executable App (.exe via Tauri & GitHub)</span>
-                    <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-800 dark:bg-amber-950 dark:text-amber-300">
-                      ⚡ Tauri v2 (~4MB)
-                    </span>
-                  </h2>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                    Build native ultra-lightweight Windows Installer (.exe) and MSI (~4MB size vs 100MB Electron) using free GitHub Actions runners. Configured with <code className="font-mono bg-amber-100/70 dark:bg-amber-950 px-1 py-0.5 rounded">src-tauri/</code> and <code className="font-mono bg-amber-100/70 dark:bg-amber-950 px-1 py-0.5 rounded">.github/workflows/build-tauri-windows-exe.yml</code>.
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-2 shrink-0">
-                {onOpenWindowsExe && (
-                  <button
-                    type="button"
-                    onClick={onOpenWindowsExe}
-                    className="flex items-center gap-2 rounded-xl bg-amber-500 px-4 py-2.5 text-xs font-semibold text-white shadow-sm hover:bg-amber-600 active:scale-98 transition-all cursor-pointer"
-                  >
-                    <Monitor className="h-4 w-4" />
-                    <span>Open Tauri .exe Guide & Tools</span>
-                  </button>
-                )}
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs text-slate-600 dark:text-slate-400 pt-1">
-              <div className="flex items-center gap-2">
-                <CheckCircle2 className="h-4 w-4 text-amber-500 shrink-0" />
-                <span>Tiny ~4MB .exe using Windows native WebView2 and Rust</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <CheckCircle2 className="h-4 w-4 text-amber-500 shrink-0" />
-                <span>Automated build on git push via official tauri-apps action</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <CheckCircle2 className="h-4 w-4 text-amber-500 shrink-0" />
-                <span>Download direct from GitHub Actions Artifacts / Releases</span>
-              </div>
-            </div>
-          </div>
 
           {/* Full Atomic Backup */}
           <div className="lg:col-span-6 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900 space-y-4">
@@ -985,21 +880,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 <div>
                   <div className="text-xs font-bold text-slate-900 dark:text-white">CSV Spreadsheet</div>
                   <div className="text-[10px] text-slate-400">Universal tabular</div>
-                </div>
-              </button>
-
-              <button
-                type="button"
-                onClick={handleExportCompleteHtml}
-                className="col-span-2 flex items-center gap-2.5 rounded-2xl border border-indigo-200 bg-indigo-50/60 p-3.5 text-left transition-colors hover:bg-indigo-100/70 dark:border-indigo-800/80 dark:bg-indigo-950/40 cursor-pointer"
-              >
-                <Globe className="h-4 w-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
-                <div>
-                  <div className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
-                    <span>Standalone Web App (.html)</span>
-                    <span className="text-[9px] font-bold bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300 px-1.5 py-0.5 rounded-sm">Interactive Offline</span>
-                  </div>
-                  <div className="text-[10px] text-slate-500 dark:text-slate-400">Single self-contained HTML file runnable in any browser</div>
                 </div>
               </button>
             </div>
