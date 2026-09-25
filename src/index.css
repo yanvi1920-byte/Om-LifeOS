@@ -23,12 +23,19 @@
   html {
     scroll-behavior: smooth;
     -webkit-text-size-adjust: 100%;
+    background: transparent !important;
   }
 
   body {
     font-family: var(--font-sans);
     min-height: 100vh;
     overflow-x: hidden;
+    background: transparent !important;
+  }
+
+  #root {
+    min-height: 100vh;
+    background: transparent !important;
   }
 
   .font-mono, [data-tabular="true"], .tabular-nums {
@@ -67,45 +74,74 @@
 }
 
 
-/* Optional Glass appearance. Normal mode keeps the existing surfaces unchanged. */
+/* Glass appearance.
+ * The native Tauri window is transparent; this document/root must also stay
+ * transparent so the desktop can actually show through translucent surfaces.
+ * Normal mode keeps the existing opaque app surface unchanged.
+ */
 .glass-mode {
-  background: radial-gradient(circle at top right, rgba(99, 102, 241, 0.10), transparent 35%),
-              radial-gradient(circle at bottom left, rgba(14, 165, 233, 0.08), transparent 30%),
-              transparent;
+  background:
+    radial-gradient(circle at top right, rgba(99, 102, 241, 0.10), transparent 35%),
+    radial-gradient(circle at bottom left, rgba(14, 165, 233, 0.08), transparent 30%),
+    transparent !important;
+  background-color: transparent !important;
 }
+
 .glass-mode header,
 .glass-mode aside,
 .glass-mode main {
-  background-color: rgba(255, 255, 255, 0.42);
+  background-color: rgba(255, 255, 255, 0.42) !important;
   border-color: rgba(148, 163, 184, 0.30);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
 }
-.glass-mode .bg-white,
-.glass-mode .bg-slate-50,
-.glass-mode .bg-slate-900,
-.glass-mode .bg-slate-950 {
-  background-color: rgba(255, 255, 255, 0.48);
+
+/* Cover both solid Tailwind surfaces and their opacity variants
+ * (bg-white/95, bg-slate-50/80, etc.). */
+.glass-mode [class*="bg-white"],
+.glass-mode [class*="bg-slate-50"],
+.glass-mode [class*="bg-slate-100"],
+.glass-mode [class*="bg-slate-200"],
+.glass-mode [class*="bg-slate-800"],
+.glass-mode [class*="bg-slate-900"],
+.glass-mode [class*="bg-slate-950"] {
+  background-color: rgba(255, 255, 255, 0.48) !important;
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
 }
+
 .dark .glass-mode {
   color-scheme: dark;
 }
+
 .dark .glass-mode header,
 .dark .glass-mode aside,
-.dark .glass-mode main,
-.dark .glass-mode .bg-white,
-.dark .glass-mode .bg-slate-50,
-.dark .glass-mode .bg-slate-900,
-.dark .glass-mode .bg-slate-950 {
-  background-color: rgba(15, 23, 42, 0.48);
+.dark .glass-mode main {
+  background-color: rgba(15, 23, 42, 0.48) !important;
   border-color: rgba(100, 116, 139, 0.30);
 }
+
+.dark .glass-mode [class*="bg-white"],
+.dark .glass-mode [class*="bg-slate-50"],
+.dark .glass-mode [class*="bg-slate-100"],
+.dark .glass-mode [class*="bg-slate-200"],
+.dark .glass-mode [class*="bg-slate-800"],
+.dark .glass-mode [class*="bg-slate-900"],
+.dark .glass-mode [class*="bg-slate-950"] {
+  background-color: rgba(15, 23, 42, 0.48) !important;
+}
+
 @media (max-width: 767px) {
-  .glass-mode header, .glass-mode aside, .glass-mode main,
-  .glass-mode .bg-white, .glass-mode .bg-slate-50,
-  .glass-mode .bg-slate-900, .glass-mode .bg-slate-950 {
+  .glass-mode header,
+  .glass-mode aside,
+  .glass-mode main,
+  .glass-mode [class*="bg-white"],
+  .glass-mode [class*="bg-slate-50"],
+  .glass-mode [class*="bg-slate-100"],
+  .glass-mode [class*="bg-slate-200"],
+  .glass-mode [class*="bg-slate-800"],
+  .glass-mode [class*="bg-slate-900"],
+  .glass-mode [class*="bg-slate-950"] {
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
   }
