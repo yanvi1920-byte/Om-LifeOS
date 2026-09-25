@@ -22,18 +22,24 @@ jobs:
         with:
           node-version: 22
 
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: x86_64-pc-windows-msvc
 
-      - name: Check Node.js and npm
+      - name: Check Node.js, npm and Bun
         run: |
           node --version
           npm --version
+          bun --version
 
       - name: Install dependencies
-        run: npm install
+        run: bun install
 
       - name: Build Windows release
         uses: tauri-apps/tauri-action@v0
@@ -41,7 +47,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tagName: ${{ github.ref_name }}
-          releaseName: ॐ ${{ github.ref_name }}
+          releaseName: "ॐ ${{ github.ref_name }}"
           releaseBody: |
             ॐ LifeOS ${{ github.ref_name }}
 
