@@ -10,7 +10,7 @@
     "build:single": "vite build && node scripts/build-single-html.js",
     "electron:build:win": "vite build && electron-builder --win nsis portable",
     "tauri": "tauri",
-    "tauri:build:win": "vite build && tauri build",
+    "tauri:build:win": "tauri build --bundles nsis",
     "preview": "vite preview",
     "clean": "rm -rf dist release server.js",
     "lint": "tsc --noEmit"
@@ -53,6 +53,7 @@
     "vite": "^8.3.0"
   },
   "devDependencies": {
+    "@tauri-apps/cli": "^2.11.5",
     "@types/express": "^4.17.21",
     "@types/jszip": "^3.4.1",
     "@types/node": "^22.14.0",
